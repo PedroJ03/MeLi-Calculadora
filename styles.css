@@ -1,0 +1,575 @@
+/* ==========================================================================
+   MeLi Calculadora - Styles
+   Focus: #meli-calc-panel design and dark mode support
+   ========================================================================== */
+
+:root {
+  --meli-primary: #1A9E66; /* MeLi Green */
+  --meli-primary-dark: #147d51;
+  --meli-bg: #ffffff;
+  --meli-text: #333333;
+  --meli-text-muted: #666666;
+  --meli-border: #e0e0e0;
+  --meli-input-bg: #ffffff;
+  --meli-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --meli-success-bg: #e8f7f0;
+  --meli-success-text: #1A9E66;
+  --meli-error-bg: #fde8e8;
+  --meli-error-text: #e74c3c;
+  --meli-warning-bg: #fff9c4;
+  --meli-warning-text: #856404;
+  --meli-radius: 12px;
+  --meli-font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --meli-bg: #1e1e1e;
+    --meli-text: #e0e0e0;
+    --meli-text-muted: #aaaaaa;
+    --meli-border: #444444;
+    --meli-input-bg: #2a2a2a;
+    --meli-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --meli-success-bg: #1e3a2f;
+    --meli-error-bg: #3a1e1e;
+    --meli-warning-bg: #3a351e;
+  }
+}
+
+/* Base Panel */
+#meli-calc-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 280px;
+  background: var(--meli-bg);
+  border: 1px solid var(--meli-border);
+  border-radius: var(--meli-radius);
+  box-shadow: var(--meli-shadow);
+  font-family: var(--meli-font);
+  z-index: 999999;
+  animation: meli-slide-in 0.2s ease-out;
+  transition: all 0.3s ease;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Animations */
+@keyframes meli-slide-in {
+  from { transform: translateX(300px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Header */
+.meli-calc-header {
+  background: var(--meli-primary);
+  color: #ffffff;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: var(--meli-radius) var(--meli-radius) 0 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.meli-calc-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Body Content */
+.meli-calc-body {
+  padding: 16px;
+  max-height: 80vh;
+  overflow-y: auto;
+  color: var(--meli-text);
+  transition: max-height 0.3s ease, padding 0.3s ease;
+}
+
+/* Inputs and Selects */
+.meli-calc-input-group {
+  margin-bottom: 12px;
+}
+
+.meli-calc-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--meli-text-muted);
+  margin-bottom: 4px;
+}
+
+.meli-calc-input, 
+.meli-calc-select {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--meli-input-bg);
+  border: 1px solid var(--meli-border);
+  border-radius: 6px;
+  padding: 8px;
+  color: var(--meli-text);
+  font-family: var(--meli-font);
+  font-size: 13px;
+  transition: border-color 0.2s;
+}
+
+.meli-calc-input:focus, 
+.meli-calc-select:focus {
+  border-color: var(--meli-primary);
+  outline: none;
+}
+
+/* Results Section */
+.meli-calc-results {
+  margin-top: 16px;
+  border-top: 1px solid var(--meli-border);
+  padding-top: 12px;
+}
+
+.meli-calc-result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.meli-calc-result-row:last-child {
+  margin-bottom: 0;
+}
+
+.meli-calc-positive {
+  color: var(--meli-success-text);
+  background: var(--meli-success-bg);
+  padding: 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.meli-calc-negative {
+  color: var(--meli-error-text);
+  background: var(--meli-error-bg);
+  padding: 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.meli-calc-warning-badge {
+  background: var(--meli-warning-bg);
+  color: var(--meli-warning-text);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Minimizable State */
+#meli-calc-panel.minimized {
+  width: 200px;
+}
+
+#meli-calc-panel.minimized .meli-calc-body {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
+/* Popup Basic Styles */
+body.meli-popup {
+  margin: 0;
+  padding: 0;
+  width: 320px;
+  background: var(--meli-bg);
+  color: var(--meli-text);
+  font-family: var(--meli-font);
+}
+
+.meli-popup-container {
+  padding: 16px;
+}
+
+/* Scrollbar */
+.meli-calc-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.meli-calc-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.meli-calc-body::-webkit-scrollbar-thumb {
+  background: var(--meli-border);
+  border-radius: 10px;
+}
+
+.meli-calc-body::-webkit-scrollbar-thumb:hover {
+  background: var(--meli-text-muted);
+}
+
+/* ==========================================================================
+   POPUP STYLES
+   ========================================================================== */
+
+/* Header */
+.meli-popup-header {
+  background: var(--meli-primary);
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: var(--meli-radius) var(--meli-radius) 0 0;
+}
+
+.meli-popup-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.meli-popup-logo {
+  font-size: 18px;
+}
+
+.meli-popup-version {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-left: auto;
+}
+
+/* Main Content */
+.meli-popup-main {
+  padding: 0;
+}
+
+/* Sections */
+.meli-popup-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--meli-border);
+}
+
+.meli-popup-section h2 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: var(--meli-text);
+}
+
+/* Form Groups */
+.meli-form-group {
+  margin-bottom: 12px;
+}
+
+.meli-form-group:last-child {
+  margin-bottom: 0;
+}
+
+.meli-form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--meli-text-muted);
+  margin-bottom: 4px;
+}
+
+.meli-form-group small {
+  display: block;
+  font-size: 11px;
+  color: var(--meli-text-muted);
+  margin-top: 4px;
+}
+
+/* Select */
+.meli-popup-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--meli-border);
+  border-radius: 6px;
+  background: var(--meli-input-bg);
+  color: var(--meli-text);
+  font-family: var(--meli-font);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.meli-popup-select:focus {
+  border-color: var(--meli-primary);
+  outline: none;
+}
+
+/* Input with suffix */
+.meli-popup-input-wrap {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--meli-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--meli-input-bg);
+}
+
+.meli-popup-input-wrap:focus-within {
+  border-color: var(--meli-primary);
+}
+
+.meli-popup-input {
+  flex: 1;
+  border: none;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--meli-text);
+  font-family: var(--meli-font);
+  font-size: 13px;
+  outline: none;
+}
+
+.meli-popup-input::-webkit-inner-spin-button,
+.meli-popup-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.meli-popup-suffix {
+  padding: 8px 10px;
+  background: #f5f5f5;
+  color: var(--meli-text-muted);
+  font-weight: 500;
+  border-left: 1px solid var(--meli-border);
+}
+
+@media (prefers-color-scheme: dark) {
+  .meli-popup-suffix {
+    background: #3a3a3a;
+  }
+}
+
+/* Historial List */
+.meli-historial-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.meli-historial-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.meli-historial-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.meli-historial-list::-webkit-scrollbar-thumb {
+  background: var(--meli-border);
+  border-radius: 4px;
+}
+
+/* Historial Item */
+.meli-historial-item {
+  padding: 10px;
+  background: var(--meli-input-bg);
+  border: 1px solid var(--meli-border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.meli-historial-item:last-child {
+  margin-bottom: 0;
+}
+
+.meli-historial-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--meli-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 6px;
+}
+
+.meli-historial-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.meli-historial-price {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--meli-text);
+}
+
+.meli-historial-profit {
+  color: var(--meli-success-text);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.meli-historial-loss {
+  color: var(--meli-error-text);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.meli-historial-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--meli-text-muted);
+}
+
+.meli-historial-margin {
+  font-weight: 500;
+}
+
+/* Empty State */
+.meli-empty-state {
+  text-align: center;
+  color: var(--meli-text-muted);
+  font-size: 12px;
+  padding: 16px;
+  margin: 0;
+}
+
+/* Aviso */
+.meli-aviso {
+  background: var(--meli-warning-bg);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.meli-aviso-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.meli-aviso-text {
+  font-size: 12px;
+  color: var(--meli-warning-text);
+  line-height: 1.4;
+}
+
+/* Links */
+.meli-popup-links {
+  padding: 12px 16px;
+}
+
+.meli-popup-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--meli-primary);
+  text-decoration: none;
+}
+
+.meli-popup-links a:hover {
+  text-decoration: underline;
+}
+
+/* Footer */
+.meli-popup-footer {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--meli-border);
+  background: var(--meli-input-bg);
+}
+
+.meli-popup-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--meli-border);
+  border-radius: 6px;
+  font-family: var(--meli-font);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.meli-popup-btn-secondary {
+  background: var(--meli-input-bg);
+  color: var(--meli-text-muted);
+}
+
+.meli-popup-btn-secondary:hover {
+  background: var(--meli-border);
+  color: var(--meli-text);
+}
+
+/* Save Status */
+.meli-save-status {
+  font-size: 11px;
+  color: var(--meli-success-text);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.meli-save-status.visible {
+  opacity: 1;
+}
+
+/* ==========================================================================
+   EDGE CASE STYLES
+   ========================================================================== */
+
+/* Loss warning */
+.meli-loss-alert {
+  background: var(--meli-error-bg);
+  color: var(--meli-error-text);
+  padding: 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+/* Low margin badge */
+.meli-margin-badge {
+  display: inline-block;
+  background: #fff3cd;
+  color: #856404;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+/* Fixed cost tooltip */
+.meli-cost-fixed-row {
+  position: relative;
+  cursor: help;
+}
+
+.meli-cost-fixed-row .meli-tooltip {
+  visibility: hidden;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 1000;
+  margin-bottom: 4px;
+}
+
+.meli-cost-fixed-row:hover .meli-tooltip {
+  visibility: visible;
+}
+
+/* Dark mode tooltip */
+@media (prefers-color-scheme: dark) {
+  .meli-cost-fixed-row .meli-tooltip {
+    background: #555;
+  }
+}
