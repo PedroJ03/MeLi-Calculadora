@@ -82,12 +82,23 @@
       }
       
       // 3. Try to fetch with 5 second timeout
-      const fetchPromise = fetch(CONFIG_URL);
+      const fetchPromise = fetch(CONFIG_URL, {
+        cache: 'no-store',
+        mode: 'cors',
+        credentials: 'omit'
+      });
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('timeout')), 5000)
       );
       
       const response = await Promise.race([fetchPromise, timeoutPromise]);
+      
+      // 404 means config.json doesn't exist on GitHub yet - this is OK, use fallback silently
+      if (response.status === 404) {
+        console.log('[MeLi Calc] config.json not found on GitHub (404) - using fallback');
+        cachedConfig = { ...FALLBACK_CONFIG, _fuente: 'fallback' };
+        return cachedConfig;
+      }
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -333,31 +344,61 @@
         category_id: itemData.categoryId,
       });
 
-      console.log('[MeLi Calc] Making authenticated API request...');
-      const res = await fetch(
-        `${API_BASE}/sites/MLA/listing_prices?${params}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const url = `${API_BASE}/sites/MLA/listing_prices?${params}`;
+      console.log('[MeLi Calc] Making authenticated API request...', {
+        url: url,
+        tokenPrefix: token.substring(0, 20) + '...',
+        tokenLength: token.length
+      });
+
+      const res = await fetch(url, {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-store'
+      });
 
       if (!res.ok) {
-        console.warn('[MeLi Calc] listing_prices failed:', res.status);
+        console.warn('[MeLi Calc] listing_prices failed:', res.status, res.statusText);
         return null;
       }
 
       const data = await res.json();
       
-      // Find matching listing type or use first
-      const match = data.find(l => l.listing_type_id === itemData.listingTypeId) || data[0];
+      // Debug: log the response structure
+      console.log('[MeLi Calc] listing_prices response:', JSON.stringify(data).substring(0, 500));
       
-      if (!match) return null;
+      // Handle different response formats
+      let match = null;
+      
+      // Try to find matching listing type
+      if (Array.isArray(data)) {
+        match = data.find(l => l.listing_type_id === itemData.listingTypeId) || data[0];
+      } else if (data.listing_prices && Array.isArray(data.listing_prices)) {
+        match = data.listing_prices.find(l => l.listing_type_id === itemData.listingTypeId) || data.listing_prices[0];
+      } else if (typeof data === 'object') {
+        // Maybe it's a single object
+        match = data;
+      }
+      
+      if (!match) {
+        console.warn('[MeLi Calc] No matching listing type found in response');
+        return null;
+      }
 
       return {
-        comisionMonto: match.sale_fee_amount,
-        costoFijoMonto: match.listing_fee_amount || 0,
+        comisionMonto: match.sale_fee_amount || match.commission || 0,
+        costoFijoMonto: match.listing_fee_amount || match.listing_fee || 0,
         source: 'api_oficial'
       };
     } catch (e) {
-      console.warn('[MeLi Calc] fetchComision failed:', e.message);
+      console.warn('[MeLi Calc] fetchComision failed:', e.message, {
+        name: e.name,
+        stack: e.stack?.substring(0, 200)
+      });
       return null;
     }
   }
