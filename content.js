@@ -563,9 +563,25 @@
       costoFijoMonto = data.costoFijoMonto;
       comisionPorcentaje = comisionMonto / precioVenta;
     } else {
-      // Use fallback config percentages
-      const tipoPub = params.tipoPub || 'clasica';
-      comisionPorcentaje = FALLBACK_CONFIG.comisiones[tipoPub]?.default ?? 0.13;
+      // Estimate using the listing type from MeLi API if available
+      // MeLi listing types: gold_special (clásica), gold_premium, gold_pro, etc.
+      const listingTypeMap = {
+        'gold_special': 'clasica',
+        'gold_premium': 'cuotas_precio',
+        'gold_pro': 'cuotas_precio',
+        'gold': 'clasica',
+        'silver': 'clasica',
+        'bronze': 'clasica',
+      };
+      
+      // Try to use the listingTypeId from API data
+      let tipoPubKey = params.tipoPub || 'clasica';
+      if (data.listingTypeId) {
+        const mapped = listingTypeMap[data.listingTypeId];
+        if (mapped) tipoPubKey = mapped;
+      }
+      
+      comisionPorcentaje = FALLBACK_CONFIG.comisiones[tipoPubKey]?.default ?? 0.13;
       comisionMonto = precioVenta * comisionPorcentaje;
       costoFijoMonto = FALLBACK_CONFIG.costo_fijo?.find(r => precioVenta <= r.hasta)?.costo ?? 0;
     }
@@ -731,18 +747,22 @@
     
     switch (source) {
       case 'api_oficial':
+        // Verde: Tenemos datos exactos de la API oficial
         banner.classList.add('official');
         banner.innerHTML = '✓ Datos oficiales MeLi';
         break;
       case 'api_publica_estimado':
-        banner.classList.add('estimated');
-        banner.innerHTML = '⚠ Estimado — Iniciá sesión en MeLi para datos exactos';
+        // Verde: Tenemos datos reales del producto (precio, tipo publicación)
+        // Las comisiones son estimadas pero el precio es real
+        banner.classList.add('official');
+        banner.innerHTML = '✓ Precio real de MeLi';
         break;
       case 'dom':
       case 'dom_fallback':
       default:
-        banner.classList.add('dom');
-        banner.innerHTML = '⚠ Estimado — precio del DOM';
+        // Amarillo: Solo podemos detectar el precio del DOM
+        banner.classList.add('estimated');
+        banner.innerHTML = '⚠ Precio estimado del DOM';
     }
   }
 
