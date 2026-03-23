@@ -344,8 +344,10 @@
         category_id: itemData.categoryId,
       });
 
-      const url = `${API_BASE}/sites/MLA/listing_prices?${params}`;
-      console.log('[MeLi Calc] Making authenticated API request...', {
+      // Use Cloudflare Worker proxy to bypass CORS
+      const PROXY_URL = 'https://round-pond-5460.pedrojossi03.workers.dev';
+      const url = `${PROXY_URL}/listing-prices?${params}`;
+      console.log('[MeLi Calc] Making authenticated API request via proxy...', {
         url: url,
         tokenPrefix: token.substring(0, 20) + '...',
         tokenLength: token.length
