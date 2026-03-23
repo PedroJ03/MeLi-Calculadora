@@ -194,6 +194,122 @@
     }
   }
 
+  // ═══ TOKEN EXTRACTION STRATEGIES ═══
+
+  /**
+   * Strategy E: Try to extract token from cookies
+   * MeLi sometimes stores session in cookies
+   */
+  function extractTokenFromCookies() {
+    try {
+      const cookies = document.cookie;
+      console.log('[MeLi Calc] Cookie raw:', cookies.substring(0, 200));
+      
+      // Look for common MeLi session cookie patterns
+      const patterns = [
+        /session[^=]*=([^;]+)/i,
+        /\_ml_session\s*=\s*([^;]+)/i,
+        /access_token\s*=\s*([^;]+)/i,
+        /Bearer\s+([a-zA-Z0-9\-_]+)/i
+      ];
+      
+      for (const pattern of patterns) {
+        const match = cookies.match(pattern);
+        if (match && match[1] && match[1].length > 20) {
+          console.log('[MeLi Calc] Found token in cookies!');
+          return match[1];
+        }
+      }
+    } catch (e) {
+      console.log('[MeLi Calc] Cookie extraction failed:', e.message);
+    }
+    return null;
+  }
+
+  /**
+   * Strategy F: Check window objects for auth info
+   * MeLi may expose user data in window objects
+   */
+  function extractTokenFromWindowObjects() {
+    const windowProps = [
+      '__PRELOADED_STATE__',
+      '__STATE__',
+      '__NEXT_DATA__',
+      'MELI',
+      'MELI_USER_ID',
+      'serverTime',
+      '__INITIAL_PROPS__',
+      '__REUX_DEVTOOLS_HOOK__'
+    ];
+    
+    for (const prop of windowProps) {
+      try {
+        const obj = window[prop];
+        if (obj) {
+          const objStr = JSON.stringify(obj);
+          // Look for Bearer token pattern
+          const tokenMatch = objStr.match(/Bearer\s+([a-zA-Z0-9\-_\.]+)/);
+          if (tokenMatch && tokenMatch[1]) {
+            console.log('[MeLi Calc] Found token in window.' + prop);
+            return tokenMatch[1];
+          }
+          // Look for access_token
+          const accessMatch = objStr.match(/"access_token"\s*:\s*"([^"]+)"/);
+          if (accessMatch && accessMatch[1]) {
+            console.log('[MeLi Calc] Found access_token in window.' + prop);
+            return accessMatch[1];
+          }
+        }
+      } catch (e) {
+        // Some objects may throw on JSON.stringify
+      }
+    }
+    
+    // Also check localStorage/sessionStorage
+    try {
+      const localToken = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
+      if (localToken) {
+        console.log('[MeLi Calc] Found token in localStorage/sessionStorage');
+        return localToken;
+      }
+    } catch (e) {
+      // Storage might be blocked
+    }
+    
+    return null;
+  }
+
+  /**
+   * Get token using all available strategies
+   * @returns {Promise<string|null>} Token or null
+   */
+  async function getTokenWithFallbacks() {
+    console.log('[MeLi Calc] Getting token with fallbacks...');
+    
+    // First try via background service worker (most reliable)
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_TOKEN' });
+      if (response.token && !response.isExpired) {
+        console.log('[MeLi Calc] Got token from background service worker');
+        return response.token;
+      }
+      console.log('[MeLi Calc] No valid token from background, trying fallbacks...');
+    } catch (e) {
+      console.log('[MeLi Calc] Background token request failed:', e.message);
+    }
+    
+    // Strategy E: Cookies
+    const cookieToken = extractTokenFromCookies();
+    if (cookieToken) return cookieToken;
+    
+    // Strategy F: Window objects
+    const windowToken = extractTokenFromWindowObjects();
+    if (windowToken) return windowToken;
+    
+    console.log('[MeLi Calc] All token extraction strategies failed');
+    return null;
+  }
+
   // ═══ LAYER 2: OFFICIAL API (Requires Token) ═══
 
   /**
@@ -203,11 +319,11 @@
    */
   async function fetchComision(itemData) {
     try {
-      const response = await chrome.runtime.sendMessage({ type: 'GET_TOKEN' });
-      const { token, isExpired } = response;
+      // Get token using all available strategies
+      const token = await getTokenWithFallbacks();
       
-      if (!token || isExpired) {
-        console.log('[MeLi Calc] No valid token available');
+      if (!token) {
+        console.log('[MeLi Calc] No valid token available after trying all strategies');
         return null;
       }
 
@@ -217,6 +333,7 @@
         category_id: itemData.categoryId,
       });
 
+      console.log('[MeLi Calc] Making authenticated API request...');
       const res = await fetch(
         `${API_BASE}/sites/MLA/listing_prices?${params}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -553,28 +670,42 @@
   }
 
   /**
-   * Update source badge based on data source
+   * Update the prominent source banner based on data source
+   * This creates a colored banner at the TOP of the results section
    * @param {string} source - Data source identifier
    */
-  function updateSourceBadge(source) {
-    const badge = panelElement?.querySelector('#meli-calc-source');
-    if (!badge) return;
+  function updateSourceBanner(source) {
+    const banner = panelElement?.querySelector('#meli-source-banner');
+    if (!banner) {
+      console.log('[MeLi Calc] Banner element not found!');
+      return;
+    }
+    
+    console.log('[MeLi Calc] Updating source banner to:', source);
+    
+    // Reset classes
+    banner.className = 'meli-source-banner';
     
     switch (source) {
       case 'api_oficial':
-        badge.textContent = '✓ Datos oficiales MeLi';
-        badge.style.color = '#1A9E66';
+        banner.classList.add('official');
+        banner.innerHTML = '✓ Datos oficiales MeLi';
         break;
       case 'api_publica_estimado':
-        badge.textContent = '~ Estimado — iniciá sesión';
-        badge.style.color = '#f39c12';
+        banner.classList.add('estimated');
+        banner.innerHTML = '⚠ Estimado — Iniciá sesión en MeLi para datos exactos';
         break;
       case 'dom':
       case 'dom_fallback':
       default:
-        badge.textContent = '~ Estimado';
-        badge.style.color = '#95a5a6';
+        banner.classList.add('dom');
+        banner.innerHTML = '⚠ Estimado — precio del DOM';
     }
+  }
+
+  // Legacy function kept for compatibility but now redirects to banner
+  function updateSourceBadge(source) {
+    updateSourceBanner(source);
   }
 
   function injectStyles() {
@@ -654,6 +785,37 @@
         padding: 16px;
         max-height: calc(100vh - 100px);
         overflow-y: auto;
+      }
+
+      /* SOURCE BANNER - Prominent at top of results */
+      .meli-source-banner {
+        padding: 10px 12px;
+        border-radius: 8px 8px 0 0;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        text-align: center;
+        margin: -16px -16px 16px -16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+
+      .meli-source-banner.official {
+        background: #1A9E66;
+        color: white;
+      }
+
+      .meli-source-banner.estimated {
+        background: #f39c12;
+        color: white;
+      }
+
+      .meli-source-banner.dom {
+        background: #95a5a6;
+        color: white;
       }
 
       .meli-calc-inputs {
@@ -856,6 +1018,11 @@
         <button class="meli-calc-toggle">${preferences.minimized ? '+' : '−'}</button>
       </div>
       <div class="meli-calc-content">
+        <!-- SOURCE BANNER - Prominent indicator at top -->
+        <div class="meli-source-banner dom" id="meli-source-banner">
+          ⚠ Cargando...
+        </div>
+        
         <!-- Inputs Section -->
         <div class="meli-calc-inputs">
           <div class="meli-calc-row-input">
@@ -964,7 +1131,7 @@
           </div>
         </div>
         
-        <!-- Config Source -->
+        <!-- Config Source - Footer (legacy, kept for version info) -->
         <div class="meli-calc-footer">
           <span id="meli-calc-source">~ Estimado</span>
           <span id="meli-calc-version">v${FALLBACK_CONFIG.version}</span>
@@ -1090,7 +1257,10 @@
     // Update display with result
     updateDisplay(result, inputs);
     
-    // Show appropriate badge based on source
+    // Update prominent source banner
+    updateSourceBanner(result.source);
+    
+    // Also update legacy footer badge for compatibility
     updateSourceBadge(result.source);
   }
 
@@ -1163,6 +1333,8 @@
     // Mark as attempting injection
     panelInjected = true;
 
+    console.log('[MeLi Calc] Initializing panel...');
+
     // Load config in background
     loadConfig().then(config => {
       currentConfig = config;
@@ -1222,6 +1394,9 @@
     // Initial calculation only if we have a price
     if (precioVenta && precioVenta > 0) {
       calculateAndDisplay();
+    } else {
+      // Show default banner state for when no price
+      updateSourceBanner('dom');
     }
     
     console.log('[MeLi Calc] Panel injected successfully' + (precioVenta ? '' : ' (sin precio detectado)'));

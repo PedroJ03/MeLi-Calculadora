@@ -586,3 +586,54 @@ body.meli-popup {
     background: #555;
   }
 }
+
+/* ==========================================================================
+   SOURCE BANNER - Prominent indicator
+   ========================================================================== */
+
+/* Source banner at top of results */
+.meli-source-banner {
+  padding: 10px 12px;
+  border-radius: 8px 8px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+  margin: -16px -16px 16px -16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.meli-source-banner.official {
+  background: #1A9E66;
+  color: white;
+}
+
+.meli-source-banner.estimated {
+  background: #f39c12;
+  color: white;
+}
+
+.meli-source-banner.dom {
+  background: #95a5a6;
+  color: white;
+}
+
+/* Dark mode adjustments for banner */
+@media (prefers-color-scheme: dark) {
+  .meli-source-banner.official {
+    background: #147d51;
+  }
+  
+  .meli-source-banner.estimated {
+    background: #d68910;
+  }
+  
+  .meli-source-banner.dom {
+    background: #7f8c8d;
+  }
+}
