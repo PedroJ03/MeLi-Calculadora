@@ -683,7 +683,7 @@
     
     div.innerHTML = `
       <div class="meli-calc-header">
-        <span>🧮 MeLi Calculadora</span>
+        <span>MeLi Calculadora</span>
         <button class="meli-calc-toggle">${preferences.minimized ? '+' : '−'}</button>
       </div>
       <div class="meli-calc-content">
