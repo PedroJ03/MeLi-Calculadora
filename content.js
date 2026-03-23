@@ -1387,9 +1387,11 @@
 
     // Calculate button
     const calcBtn = panelElement.querySelector('#meli-calc-btn');
-    const calcClickListener = () => calculateAndDisplay();
-    calcBtn.addEventListener('click', calcClickListener);
-    currentListeners.push({ element: calcBtn, event: 'click', listener: calcClickListener });
+    if (calcBtn) {
+      const calcClickListener = () => calculateAndDisplay();
+      calcBtn.addEventListener('click', calcClickListener);
+      currentListeners.push({ element: calcBtn, event: 'click', listener: calcClickListener });
+    }
   }
 
   function debouncedCalculate() {
