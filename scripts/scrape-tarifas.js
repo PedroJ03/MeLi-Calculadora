@@ -8,7 +8,7 @@ const URL = 'https://www.mercadolibre.com.ar/ayuda/Costos-de-vender-un-producto_
 const VARIATION_THRESHOLD = 5; // 5 percentage points
 
 async function scrapeTarifas() {
-  console.log('🔍 Scrapeando tarifas de MeLi...');
+  console.log('🔍 Scrapeando tarifas de MeLi (Modo Inteligente)...');
   console.log(`URL: ${URL}`);
   
   try {
@@ -26,176 +26,140 @@ async function scrapeTarifas() {
     const html = await response.text();
     const $ = cheerio.load(html);
     
-    // Buscar tablas con porcentajes
-    const porcentajes = [];
-    $('table td, table th').each((i, el) => {
-      const text = $(el).text().trim();
-      // Buscar patrones como "13%", "15,5%", "13.5%"
-      const match = text.match(/(\d+[.,]?\d*)\s*%/);
-      if (match) {
-        const valor = parseFloat(match[1].replace(',', '.'));
-        porcentajes.push(valor);
-      }
-    });
-    
-    console.log(`📊 Porcentajes encontrados: ${porcentajes.join(', ')}`);
-    
-    if (porcentajes.length === 0) {
-      console.log('⚠️ No se encontraron porcentajes en la página');
-      process.exit(0);
-    }
-    
     // Leer config actual
-    let currentConfig = {};
+    let currentConfig = {
+        comisiones: {
+            clasica: { min: 0.1162, max: 0.1714, default: 0.13 },
+            cuotas_precio: { min: 0.15, max: 0.1775, default: 0.16 },
+            cuotas_interes: { min: 0.1162, max: 0.1714, default: 0.13 }
+        },
+        costo_fijo: [],
+        iibb: {}
+    };
     if (fs.existsSync(CONFIG_FILE)) {
       currentConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
       console.log('📂 Config actual cargado');
-    } else {
-      console.log('📂 No existe config.json, creando nuevo');
-      currentConfig = {
-        version: "2025-01",
-        comisiones: {
-          clasica: { min: 0.1162, max: 0.1714, default: 0.13 },
-          cuotas_precio: { min: 0.15, max: 0.1775, default: 0.16 },
-          cuotas_interes: { min: 0.1162, max: 0.1714, default: 0.13 }
-        },
-        costo_fijo: [
-          { hasta: 15000, costo: 1095 },
-          { hasta: 25000, costo: 2190 },
-          { hasta: 33000, costo: 2628 },
-          { hasta: 999999999, costo: 0 }
-        ],
-        iibb: {
-          "Buenos Aires": 0.035,
-          "CABA": 0.03,
-          "Córdoba": 0.0475
-          // ... resto de provincias
-        }
-      };
     }
-    
-    // Crear nuevo config con valores scrapeados
+
     const newConfig = JSON.parse(JSON.stringify(currentConfig));
-    
-    // Actualizar comisiones si encontramos valores razonables
-    if (porcentajes.length >= 2) {
-      // Ordenar y tomar valores únicos
-      const valoresUnicos = [...new Set(porcentajes)].sort((a, b) => a - b);
-      
-      // Asignar a tipos de publicación (ejemplo: valores más bajos = clásica)
-      if (valoresUnicos.length >= 1) {
-        const tasa = valoresUnicos[0] / 100;
-        newConfig.comisiones.clasica.default = tasa;
-      }
-      if (valoresUnicos.length >= 2) {
-        const tasa = valoresUnicos[1] / 100;
-        newConfig.comisiones.cuotas_precio.default = tasa;
-      }
-    }
-    
-    // Calcular variación máxima
-    let maxVariation = 0;
-    const comisionesActuales = [
-      currentConfig.comisiones.clasica.default * 100,
-      currentConfig.comisiones.cuotas_precio.default * 100,
-      currentConfig.comisiones.cuotas_interes.default * 100
-    ];
-    const comisionesNuevas = [
-      newConfig.comisiones.clasica.default * 100,
-      newConfig.comisiones.cuotas_precio.default * 100,
-      newConfig.comisiones.cuotas_interes.default * 100
-    ];
-    
-    for (let i = 0; i < comisionesActuales.length; i++) {
-      const variation = Math.abs(comisionesNuevas[i] - comisionesActuales[i]);
-      if (variation > maxVariation) {
-        maxVariation = variation;
-      }
-    }
-    
-    console.log(`📈 Variación máxima: ${maxVariation.toFixed(2)} puntos porcentuales`);
-    
-    // Decidir qué hacer
-    if (maxVariation > VARIATION_THRESHOLD) {
-      // Variación muy grande - probable error de parseo
-      console.log(`⚠️ Variación muy grande (> ${VARIATION_THRESHOLD}pp). Creando archivo candidate.`);
-      
-      fs.writeFileSync(CANDIDATE_FILE, JSON.stringify(newConfig, null, 2));
-      console.log(`📝 Archivo creado: ${CANDIDATE_FILE}`);
-      
-      // Crear issue en GitHub
-      await createGitHubIssue(currentConfig, newConfig, maxVariation);
-      
-    } else {
-      // Variación razonable - actualizar directamente
-      console.log('✅ Variación razonable. Actualizando config.json...');
-      
-      // Actualizar versión con fecha actual (YYYY-MM)
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      newConfig.version = `${year}-${month}`;
-      
-      fs.writeFileSync(CONFIG_FILE, JSON.stringify(newConfig, null, 2));
-      console.log(`📝 Archivo actualizado: ${CONFIG_FILE}`);
-      console.log(`🏷️ Nueva versión: ${newConfig.version}`);
-    }
-    
-  } catch (error) {
-    console.error('❌ Error scrapeando:', error.message);
-    process.exit(1);
-  }
-}
 
-async function createGitHubIssue(currentConfig, newConfig, variation) {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) {
-    console.log('⚠️ No hay GITHUB_TOKEN, no se puede crear issue');
-    return;
-  }
-  
-  const repo = process.env.GITHUB_REPOSITORY || 'owner/repo';
-  const [owner, repoName] = repo.split('/');
-  
-  const diff = `
-## Variación detectada: ${variation.toFixed(2)} puntos porcentuales
-
-### Comisiones actuales:
-- Clásica: ${(currentConfig.comisiones.clasica.default * 100).toFixed(1)}%
-- Cuotas (precio): ${(currentConfig.comisiones.cuotas_precio.default * 100).toFixed(1)}%
-- Cuotas (interés): ${(currentConfig.comisiones.cuotas_interes.default * 100).toFixed(1)}%
-
-### Comisiones scrapeadas:
-- Clásica: ${(newConfig.comisiones.clasica.default * 100).toFixed(1)}%
-- Cuotas (precio): ${(newConfig.comisiones.cuotas_precio.default * 100).toFixed(1)}%
-- Cuotas (interés): ${(newConfig.comisiones.cuotas_interes.default * 100).toFixed(1)}%
-
-### Acción requerida:
-Revisar si los valores scrapeados son correctos. Si es así, renombrar \`config.json.candidate\` a \`config.json\`.
-  `;
-  
-  try {
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repoName}/issues`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `token ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        title: '⚠️ Revisar tarifas scrapeadas',
-        body: diff,
-        labels: ['tarifas', 'revision-requerida']
-      })
+    // 1. Comisión Clásica (Rango)
+    console.log('--- Procesando Comisión Clásica ---');
+    let clasicaMin = 0.1162;
+    let clasicaMax = 0.1775;
+    
+    // Buscamos el texto "Entre X% y Y%" cerca de "Cargo por vender"
+    const clasicaRegex = /Entre\s+(\d+[.,]\d+)\%\s+y\s+(\d+[.,]\d+)\%/i;
+    $('p, span, td').each((i, el) => {
+        const text = $(el).text().trim();
+        const match = text.match(clasicaRegex);
+        if (match) {
+            clasicaMin = parseFloat(match[1].replace(',', '.')) / 100;
+            clasicaMax = parseFloat(match[2].replace(',', '.')) / 100;
+            return false; // break
+        }
     });
     
-    if (response.ok) {
-      const issue = await response.json();
-      console.log(`🎫 Issue creado: ${issue.html_url}`);
-    } else {
-      console.log('⚠️ No se pudo crear issue:', await response.text());
+    newConfig.comisiones.clasica.min = clasicaMin;
+    newConfig.comisiones.clasica.max = clasicaMax;
+    // El default lo mantenemos si está en rango
+    if (newConfig.comisiones.clasica.default < clasicaMin || newConfig.comisiones.clasica.default > clasicaMax) {
+        newConfig.comisiones.clasica.default = 0.13; // Valor histórico común
     }
+    console.log(`Found Clásica: Min ${clasicaMin * 100}%, Max ${clasicaMax * 100}%`);
+
+    // 2. Comisión Premium (Cuotas al mismo precio)
+    console.log('--- Procesando Comisión Premium (6 cuotas) ---');
+    let costo6Cuotas = 0;
+    
+    // Buscamos específicamente en la tabla de cuotas
+    const cuotas6Regex = /6\s+cuotas\s*\|\s*Pagás\s*(\d+[.,]\d+)\%/i;
+    $('p, span, td').each((i, el) => {
+        const text = $(el).text().trim();
+        const match = text.match(cuotas6Regex);
+        if (match) {
+            costo6Cuotas = parseFloat(match[1].replace(',', '.')) / 100;
+            console.log(`Found Costo 6 Cuotas: ${costo6Cuotas * 100}%`);
+            return false;
+        }
+    });
+
+    if (costo6Cuotas > 0) {
+        newConfig.comisiones.cuotas_precio.default = parseFloat((newConfig.comisiones.clasica.default + costo6Cuotas).toFixed(4));
+        newConfig.comisiones.cuotas_precio.min = parseFloat((newConfig.comisiones.clasica.min + costo6Cuotas).toFixed(4));
+        newConfig.comisiones.cuotas_precio.max = parseFloat((newConfig.comisiones.clasica.max + costo6Cuotas).toFixed(4));
+    }
+
+    // 3. Costos Fijos
+    console.log('--- Procesando Costos Fijos ---');
+    const mapCostos = new Map();
+    const costoFijoRegex = /(?:hasta|Entre)\s*\$?\s*(\d+(?:\.\d+)?)\s*(?:y\s*\$?\s*(\d+(?:\.\d+)?))?,\s*pagás\s*\$\s*(\d+(?:\.\d+)?)/gi;
+    
+    const fullText = $('body').text();
+    let match;
+    while ((match = costoFijoRegex.exec(fullText)) !== null) {
+        let hasta;
+        if (match[2]) {
+            hasta = parseFloat(match[2].replace('.', ''));
+        } else {
+            hasta = parseFloat(match[1].replace('.', ''));
+        }
+        const costo = parseFloat(match[3].replace('.', ''));
+        
+        // Normalizamos el "hasta" (ej: 15.999 -> 16000)
+        if (hasta === 15999) hasta = 16000;
+        if (hasta === 23999) hasta = 24000;
+        
+        mapCostos.set(hasta, costo);
+    }
+
+    if (mapCostos.size > 0) {
+        const sortedHastas = Array.from(mapCostos.keys()).sort((a, b) => a - b);
+        const nuevosCostosFijos = sortedHastas.map(h => ({ hasta: h, costo: mapCostos.get(h) }));
+        
+        // Agregar el infinito
+        nuevosCostosFijos.push({ hasta: 999999999, costo: 0 });
+        
+        newConfig.costo_fijo = nuevosCostosFijos;
+        console.log('Nuevos costos fijos encontrados:', nuevosCostosFijos);
+    } else {
+        console.log('⚠️ No se encontraron costos fijos dinámicos. Manteniendo anteriores.');
+    }
+
+    // 4. Lógica de Cuotas Interés (Igual a clásica según requerimiento de contexto)
+    newConfig.comisiones.cuotas_interes = JSON.parse(JSON.stringify(newConfig.comisiones.clasica));
+
+    // Validar Variaciones
+    let maxVariation = 0;
+    const targets = [
+        { key: 'clasica', name: 'Clásica' },
+        { key: 'cuotas_precio', name: 'Premium' }
+    ];
+
+    targets.forEach(t => {
+        const oldVal = currentConfig.comisiones[t.key].default * 100;
+        const newVal = newConfig.comisiones[t.key].default * 100;
+        const diff = Math.abs(newVal - oldVal);
+        console.log(`${t.name}: ${oldVal.toFixed(2)}% -> ${newVal.toFixed(2)}% (Diff: ${diff.toFixed(2)}pp)`);
+        if (diff > maxVariation) maxVariation = diff;
+    });
+
+    // Actualizar versión
+    const now = new Date();
+    newConfig.version = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    if (maxVariation > VARIATION_THRESHOLD) {
+        console.log(`\n⚠️ VARIACIÓN EXCEDIDA (${maxVariation.toFixed(2)}pp > ${VARIATION_THRESHOLD}pp)`);
+        console.log(`Escribiendo en ${CANDIDATE_FILE}`);
+        fs.writeFileSync(CANDIDATE_FILE, JSON.stringify(newConfig, null, 2));
+    } else {
+        console.log(`\n✅ Variación aceptable (${maxVariation.toFixed(2)}pp). Actualizando ${CONFIG_FILE}`);
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(newConfig, null, 2));
+    }
+
   } catch (error) {
-    console.log('⚠️ Error creando issue:', error.message);
+    console.error('❌ Error crítico en scraper:', error.message);
+    process.exit(1);
   }
 }
 

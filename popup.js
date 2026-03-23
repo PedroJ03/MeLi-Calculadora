@@ -10,7 +10,8 @@
   const SYNC_KEYS = {
     PROVINCIA: 'provincia',
     TIPO_PUB: 'tipoPub',
-    COMISION_CUSTOM: 'comisionCustom'
+    COMISION_CUSTOM: 'comisionCustom',
+    COSTO_ENVIO: 'costoEnvio'
   };
 
   const LOCAL_KEYS = {
@@ -22,6 +23,7 @@
   let provinciaSelect;
   let tipoPubSelect;
   let comisionCustomInput;
+  let costoEnvioInput;
   let historialContainer;
   let clearHistorialBtn;
   let saveStatus;
@@ -40,6 +42,7 @@
     provinciaSelect = document.getElementById('provincia');
     tipoPubSelect = document.getElementById('tipo-pub');
     comisionCustomInput = document.getElementById('comision-custom');
+    costoEnvioInput = document.getElementById('costoEnvio');
     historialContainer = document.getElementById('historial-container');
     clearHistorialBtn = document.getElementById('clear-historial');
     saveStatus = document.getElementById('save-status');
@@ -67,7 +70,8 @@
       const result = await chrome.storage.sync.get([
         SYNC_KEYS.PROVINCIA,
         SYNC_KEYS.TIPO_PUB,
-        SYNC_KEYS.COMISION_CUSTOM
+        SYNC_KEYS.COMISION_CUSTOM,
+        SYNC_KEYS.COSTO_ENVIO
       ]);
 
       // Set values in UI
@@ -81,6 +85,10 @@
 
       if (result[SYNC_KEYS.COMISION_CUSTOM] !== undefined) {
         comisionCustomInput.value = result[SYNC_KEYS.COMISION_CUSTOM];
+      }
+
+      if (result[SYNC_KEYS.COSTO_ENVIO] !== undefined) {
+        costoEnvioInput.value = result[SYNC_KEYS.COSTO_ENVIO];
       }
     } catch (error) {
       console.log('[MeLi Calc Popup] Error loading settings:', error);
@@ -208,6 +216,13 @@
       // Save empty string as empty, or parse as float
       const numValue = value === '' ? null : parseFloat(value);
       saveSetting(SYNC_KEYS.COMISION_CUSTOM, numValue);
+    });
+
+    // CostoEnvio change
+    costoEnvioInput.addEventListener('input', () => {
+      const value = costoEnvioInput.value;
+      const numValue = value === '' ? 2800 : parseFloat(value);
+      saveSetting(SYNC_KEYS.COSTO_ENVIO, numValue);
     });
 
     // Clear history button

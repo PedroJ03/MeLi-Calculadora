@@ -1,16 +1,21 @@
 {
   "version": "2025-07",
   "comisiones": {
-    "clasica": { "min": 0.1162, "max": 0.1714, "default": 0.13 },
-    "cuotas_precio": { "min": 0.15, "max": 0.1775, "default": 0.16 },
-    "cuotas_interes": { "min": 0.1162, "max": 0.1714, "default": 0.13 }
+    "clasica": { "min": 0.1162, "max": 0.1775, "default": 0.13 },
+    "cuotas_precio": { "min": 0.2582, "max": 0.3195, "default": 0.272 },
+    "cuotas_interes": { "min": 0.1162, "max": 0.1775, "default": 0.13 }
   },
-  "costo_fijo": [
-    { "hasta": 15000, "costo": 1095 },
-    { "hasta": 25000, "costo": 2190 },
-    { "hasta": 33000, "costo": 2628 },
-    { "hasta": 999999999, "costo": 0 }
-  ],
+  "costo_unidad": {
+    "umbral_maximo": 33000,
+    "logisticas_fijas": ["custom", "not_specified"],
+    "tags_flex": ["self_service_in", "self_service_out"],
+    "fijo_escalonado": [
+      { "max": 15999, "fee": 1255 },
+      { "max": 23999, "fee": 2500 },
+      { "max": 32999.99, "fee": 3030 }
+    ],
+    "variable_estimado_default": 2800
+  },
   "iibb": {
     "Buenos Aires": 0.035,
     "CABA": 0.03,

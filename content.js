@@ -15,18 +15,23 @@
 
   // Keep FALLBACK_CONFIG for when API is not available
   const FALLBACK_CONFIG = {
-    version: "2025-07",
+    version: "2026-03",
     comisiones: {
-      clasica: { min: 0.1162, max: 0.1714, default: 0.13 },
-      cuotas_precio: { min: 0.15, max: 0.1775, default: 0.16 },
-      cuotas_interes: { min: 0.1162, max: 0.1714, default: 0.13 }
+      clasica: { min: 0.1162, max: 0.1775, default: 0.13 },
+      cuotas_precio: { min: 0.2582, max: 0.3195, default: 0.272 },
+      cuotas_interes: { min: 0.1162, max: 0.1775, default: 0.13 }
     },
-    costo_fijo: [
-      { hasta: 15000, costo: 1095 },
-      { hasta: 25000, costo: 2190 },
-      { hasta: 33000, costo: 2628 },
-      { hasta: 999999999, costo: 0 }
-    ],
+    costo_unidad: {
+      umbral_maximo: 33000,
+      logisticas_fijas: ["custom", "not_specified"],
+      tags_flex: ["self_service_in", "self_service_out"],
+      fijo_escalonado: [
+        { max: 15999, fee: 1255 },
+        { max: 23999, fee: 2500 },
+        { max: 32999.99, fee: 3030 }
+      ],
+      variable_estimado_default: 2800
+    },
     iibb: {
       "Buenos Aires": 0.035,
       "CABA": 0.03,
@@ -54,6 +59,25 @@
       "Tierra del Fuego": 0.025
     }
   };
+
+  function calcularCostoUnidadVendida(price, logisticType, tags = [], costoPromedioUsuario) {
+    const cfg = FALLBACK_CONFIG.costo_unidad;
+    if (price >= cfg.umbral_maximo) {
+      return { costo: 0, tipo: 'exento', LOG: `Producto exento de costo por unidad (≥$${cfg.umbral_maximo})` };
+    }
+
+    const isFlex = tags.some(tag => cfg.tags_flex.includes(tag));
+    const isLogisticaFija = cfg.logisticas_fijas.includes(logisticType) || isFlex;
+
+    if (isLogisticaFija) {
+      const tramo = cfg.fijo_escalonado.find(t => price <= t.max);
+      const costo = tramo ? tramo.fee : 0;
+      return { costo, tipo: 'fijo', LOG: `Logística fija detectada: $${costo}` };
+    } else {
+      const costo = costoPromedioUsuario || cfg.variable_estimado_default;
+      return { costo, tipo: 'variable', LOG: `Logística variable: $${costo} (estimado)` };
+    }
+  }
 
   // ═══ CONFIG URL FOR REMOTE CONFIG ═══
 
@@ -197,6 +221,8 @@
         listingTypeId: item.listing_type_id,
         listingType: item.listing_type_id?.replace('gold_', '').replace('_', ' '),
         freeShipping: item.shipping?.free_shipping || false,
+        logisticType: item.shipping?.logistic_type || 'not_specified',
+        shippingTags: item.shipping?.tags || [],
         source: 'api_publica'
       };
     } catch (e) {
@@ -543,9 +569,10 @@
    * Calculate seller profitability with hybrid data support
    * @param {Object} params - Calculation parameters from UI
    * @param {Object} data - Data from obtenerDatosCalculo (includes source)
+   * @param {number} costoEnvioUsuario - User configured costoEnvio from sync storage
    * @returns {Object} Calculation results
    */
-  function calcularRentabilidad(params, data) {
+  function calcularRentabilidad(params, data, costoEnvioUsuario) {
     const {
       precioVenta,
       costoProducto = 0,
@@ -583,7 +610,24 @@
       
       comisionPorcentaje = FALLBACK_CONFIG.comisiones[tipoPubKey]?.default ?? 0.13;
       comisionMonto = precioVenta * comisionPorcentaje;
-      costoFijoMonto = FALLBACK_CONFIG.costo_fijo?.find(r => precioVenta <= r.hasta)?.costo ?? 0;
+      
+      // Calculate costo por unidad using new architecture
+      const logisticType = data.logisticType || 'not_specified';
+      const shippingTags = data.shippingTags || [];
+      
+      // Check if new costo_unidad structure exists
+      if (FALLBACK_CONFIG.costo_unidad) {
+        const costoUnidadResult = calcularCostoUnidadVendida(
+          precioVenta,
+          logisticType,
+          shippingTags,
+          costoEnvioUsuario
+        );
+        costoFijoMonto = costoUnidadResult.costo;
+      } else {
+        // Backwards compatibility: use old costo_fijo array
+        costoFijoMonto = FALLBACK_CONFIG.costo_fijo?.find(r => precioVenta <= r.hasta)?.costo ?? 0;
+      }
     }
 
     // IIBB always local
@@ -1315,7 +1359,18 @@
     
     if (price <= 0) return;
 
-    const result = calcularRentabilidad(inputs, { ...calculationData, price });
+    // Load costoEnvio from sync storage
+    let costoEnvioUsuario = 2800;
+    try {
+      const stored = await chrome.storage.sync.get(['costoEnvio']);
+      if (stored.costoEnvio !== undefined) {
+        costoEnvioUsuario = parseFloat(stored.costoEnvio) || 2800;
+      }
+    } catch (e) {
+      console.log('[MeLi Calc] Could not load costoEnvio:', e.message);
+    }
+
+    const result = calcularRentabilidad(inputs, { ...calculationData, price }, costoEnvioUsuario);
 
     // Update display with result
     updateDisplay(result, inputs);

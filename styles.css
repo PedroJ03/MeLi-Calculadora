@@ -527,6 +527,40 @@ body.meli-popup {
 }
 
 /* ==========================================================================
+   SETTING GROUP STYLES
+   ========================================================================== */
+
+.setting-group {
+  margin-bottom: 12px;
+}
+
+.label-text {
+  font-weight: 600;
+  display: block;
+}
+
+.label-hint {
+  font-size: 11px;
+  color: #666;
+}
+
+.input-with-warning {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.warning-icon {
+  margin-left: 6px;
+  cursor: help;
+  opacity: 0.6;
+}
+
+.warning-icon:hover {
+  opacity: 1;
+}
+
+/* ==========================================================================
    EDGE CASE STYLES
    ========================================================================== */
 
