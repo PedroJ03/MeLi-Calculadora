@@ -1,12 +1,18 @@
 {
   "version": "2025-07",
   "comisiones": {
-    "clasica": { "min": 0.1162, "max": 0.1775, "default": 0.13 },
-    "cuotas_precio": { "min": 0.2582, "max": 0.3195, "default": 0.272 },
-    "cuotas_interes": { "min": 0.1162, "max": 0.1775, "default": 0.13 }
+    "clasica_default": 0.13,
+    "premium_recargos": {
+      "3": 0.09,
+      "6": 0.142,
+      "9": 0.189,
+      "12": 0.232
+    },
+    "interes_bajo_recargo": 0.05
   },
   "costo_unidad": {
     "umbral_maximo": 33000,
+    "umbral_envio_gratis": 30000,
     "logisticas_fijas": ["custom", "not_specified"],
     "tags_flex": ["self_service_in", "self_service_out"],
     "fijo_escalonado": [

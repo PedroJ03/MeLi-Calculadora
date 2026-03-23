@@ -17,12 +17,18 @@
   const FALLBACK_CONFIG = {
     version: "2026-03",
     comisiones: {
-      clasica: { min: 0.1162, max: 0.1775, default: 0.13 },
-      cuotas_precio: { min: 0.2582, max: 0.3195, default: 0.272 },
-      cuotas_interes: { min: 0.1162, max: 0.1775, default: 0.13 }
+      clasica_default: 0.13,
+      premium_recargos: {
+        "3": 0.09,
+        "6": 0.142,
+        "9": 0.189,
+        "12": 0.232
+      },
+      interes_bajo_recargo: 0.05
     },
     costo_unidad: {
       umbral_maximo: 33000,
+      umbral_envio_gratis: 30000,
       logisticas_fijas: ["custom", "not_specified"],
       tags_flex: ["self_service_in", "self_service_out"],
       fijo_escalonado: [
@@ -578,7 +584,9 @@
       costoProducto = 0,
       provincia = 'Buenos Aires',
       envioGratis = false,
-      costoEnvio = 0
+      costoEnvio = 0,
+      tipoPub = 'clasica',
+      cuotas = 6
     } = params;
     
     // Determine source and calculate accordingly
@@ -590,25 +598,41 @@
       costoFijoMonto = data.costoFijoMonto;
       comisionPorcentaje = comisionMonto / precioVenta;
     } else {
-      // Estimate using the listing type from MeLi API if available
-      // MeLi listing types: gold_special (clásica), gold_premium, gold_pro, etc.
-      const listingTypeMap = {
-        'gold_special': 'clasica',
-        'gold_premium': 'cuotas_precio',
-        'gold_pro': 'cuotas_precio',
-        'gold': 'clasica',
-        'silver': 'clasica',
-        'bronze': 'clasica',
-      };
+      // Use new commission structure
+      const cfg = FALLBACK_CONFIG.comisiones;
       
-      // Try to use the listingTypeId from API data
-      let tipoPubKey = params.tipoPub || 'clasica';
-      if (data.listingTypeId) {
-        const mapped = listingTypeMap[data.listingTypeId];
-        if (mapped) tipoPubKey = mapped;
+      // Check if new schema exists (has premium_recargos)
+      if (cfg.premium_recargos) {
+        // New schema: clasica_default, premium_recargos, interes_bajo_recargo
+        if (tipoPub === 'premium') {
+          const recargo = cfg.premium_recargos[cuotas] ?? cfg.premium_recargos["6"] ?? 0.142;
+          comisionPorcentaje = cfg.clasica_default + recargo;
+        } else if (tipoPub === 'interes_bajo') {
+          comisionPorcentaje = cfg.clasica_default + cfg.interes_bajo_recargo;
+        } else {
+          // clasica
+          comisionPorcentaje = cfg.clasica_default;
+        }
+      } else {
+        // Legacy schema compatibility
+        const listingTypeMap = {
+          'gold_special': 'clasica',
+          'gold_premium': 'cuotas_precio',
+          'gold_pro': 'cuotas_precio',
+          'gold': 'clasica',
+          'silver': 'clasica',
+          'bronze': 'clasica',
+        };
+        
+        let tipoPubKey = tipoPub || 'clasica';
+        if (data.listingTypeId) {
+          const mapped = listingTypeMap[data.listingTypeId];
+          if (mapped) tipoPubKey = mapped;
+        }
+        
+        comisionPorcentaje = cfg[tipoPubKey]?.default ?? 0.13;
       }
       
-      comisionPorcentaje = FALLBACK_CONFIG.comisiones[tipoPubKey]?.default ?? 0.13;
       comisionMonto = precioVenta * comisionPorcentaje;
       
       // Calculate costo por unidad using new architecture
@@ -634,8 +658,21 @@
     const tasaIIBB = FALLBACK_CONFIG.iibb?.[provincia] ?? 0.025;
     const iibbMonto = precioVenta * tasaIIBB;
     
-    // Shipping
-    const envioEfectivo = envioGratis ? (costoEnvio || 0) : 0;
+    // Shipping logic with mandatory free shipping threshold
+    const cfgCostoUnidad = FALLBACK_CONFIG.costo_unidad;
+    const umbralEnvioGratis = cfgCostoUnidad?.umbral_envio_gratis ?? 30000;
+    let envioEfectivo = 0;
+    let envioForzado = false;
+    
+    if (precioVenta >= umbralEnvioGratis) {
+      // Product above threshold - shipping is MANDATORY
+      // If user didn't check "envio gratis", we still need to account for the cost
+      envioEfectivo = costoEnvio || cfgCostoUnidad?.variable_estimado_default ?? 2800;
+      envioForzado = !envioGratis;
+    } else if (envioGratis) {
+      // Below threshold but user chose free shipping
+      envioEfectivo = costoEnvio || 0;
+    }
     
     // Totals
     const totalDescuentos = comisionMonto + costoFijoMonto + iibbMonto + envioEfectivo;
@@ -650,6 +687,7 @@
       tasaIIBB,
       iibbMonto,
       envioEfectivo,
+      envioForzado,
       totalDescuentos,
       costoProducto,
       gananciaNeta,
@@ -676,7 +714,8 @@
     PROVINCIA: 'meli_calc_provincia',
     TIPO_PUB: 'meli_calc_tipo_pub',
     COSTO_PRODUCTO: 'meli_calc_costo_producto',
-    MINIMIZED: 'meli_calc_minimized'
+    MINIMIZED: 'meli_calc_minimized',
+    CUOTAS: 'meli_calc_cuotas'
   };
 
   // ═══ HISTORIAL DE CÁLCULOS (UNCHANGED) ═══
@@ -736,21 +775,24 @@
         STORAGE_KEYS.PROVINCIA,
         STORAGE_KEYS.TIPO_PUB,
         STORAGE_KEYS.COSTO_PRODUCTO,
-        STORAGE_KEYS.MINIMIZED
+        STORAGE_KEYS.MINIMIZED,
+        'meli_calc_cuotas'
       ]);
       
       return {
         provincia: result[STORAGE_KEYS.PROVINCIA] || 'Buenos Aires',
         tipoPub: result[STORAGE_KEYS.TIPO_PUB] || 'clasica',
         costoProducto: result[STORAGE_KEYS.COSTO_PRODUCTO] || '',
-        minimized: result[STORAGE_KEYS.MINIMIZED] || false
+        minimized: result[STORAGE_KEYS.MINIMIZED] || false,
+        cuotas: result['meli_calc_cuotas'] || '6'
       };
     } catch (e) {
       return {
         provincia: 'Buenos Aires',
         tipoPub: 'clasica',
         costoProducto: '',
-        minimized: false
+        minimized: false,
+        cuotas: '6'
       };
     }
   }
@@ -1150,8 +1192,17 @@
             <label>Tipo publicación:</label>
             <select id="meli-tipo-pub">
               <option value="clasica" ${preferences.tipoPub === 'clasica' ? 'selected' : ''}>Clásica</option>
-              <option value="cuotas_precio" ${preferences.tipoPub === 'cuotas_precio' ? 'selected' : ''}>Cuotas (precio)</option>
-              <option value="cuotas_interes" ${preferences.tipoPub === 'cuotas_interes' ? 'selected' : ''}>Cuotas (interés)</option>
+              <option value="premium" ${preferences.tipoPub === 'premium' ? 'selected' : ''}>Premium (Cuotas al mismo precio)</option>
+              <option value="interes_bajo" ${preferences.tipoPub === 'interes_bajo' ? 'selected' : ''}>Cuotas con interés bajo</option>
+            </select>
+          </div>
+          <div class="meli-calc-row-select" id="meli-cuotas-group">
+            <label>Cuotas:</label>
+            <select id="meli-cuotas">
+              <option value="3" ${preferences.cuotas === '3' ? 'selected' : ''}>3 cuotas</option>
+              <option value="6" ${(!preferences.cuotas || preferences.cuotas === '6') ? 'selected' : ''}>6 cuotas</option>
+              <option value="9" ${preferences.cuotas === '9' ? 'selected' : ''}>9 cuotas</option>
+              <option value="12" ${preferences.cuotas === '12' ? 'selected' : ''}>12 cuotas</option>
             </select>
           </div>
           <div class="meli-calc-row-select">
@@ -1279,15 +1330,34 @@
 
     // Save preferences on change
     const tipoPubSelect = panelElement.querySelector('#meli-tipo-pub');
+    const cuotasSelect = panelElement.querySelector('#meli-cuotas');
+    const cuotasGroup = panelElement.querySelector('#meli-cuotas-group');
     const provinciaSelect = panelElement.querySelector('#meli-provincia');
     const costoProductoInput = panelElement.querySelector('#meli-costo-producto');
 
+    const updateCuotasVisibility = (tipoPub) => {
+      if (cuotasGroup) {
+        cuotasGroup.style.display = tipoPub === 'premium' ? 'block' : 'none';
+      }
+    };
+
     const tipoPubChangeListener = () => {
       savePreference(STORAGE_KEYS.TIPO_PUB, tipoPubSelect.value);
+      updateCuotasVisibility(tipoPubSelect.value);
       debouncedCalculate();
     };
     tipoPubSelect.addEventListener('change', tipoPubChangeListener);
     currentListeners.push({ element: tipoPubSelect, event: 'change', listener: tipoPubChangeListener });
+
+    // Initialize cuotas visibility based on current selection
+    updateCuotasVisibility(tipoPubSelect.value);
+
+    const cuotasChangeListener = () => {
+      savePreference(STORAGE_KEYS.CUOTAS, cuotasSelect.value);
+      debouncedCalculate();
+    };
+    cuotasSelect.addEventListener('change', cuotasChangeListener);
+    currentListeners.push({ element: cuotasSelect, event: 'change', listener: cuotasChangeListener });
 
     const provinciaChangeListener = () => {
       savePreference(STORAGE_KEYS.PROVINCIA, provinciaSelect.value);
@@ -1336,6 +1406,7 @@
     const provincia = panelElement.querySelector('#meli-provincia').value;
     const envioGratis = panelElement.querySelector('#meli-envio-gratis').checked;
     const costoEnvio = envioGratis ? (parseFloat(panelElement.querySelector('#meli-costo-envio').value) || 0) : 0;
+    const cuotas = parseInt(panelElement.querySelector('#meli-cuotas')?.value) || 6;
 
     return {
       precioVenta,
@@ -1343,7 +1414,8 @@
       tipoPub,
       provincia,
       envioGratis,
-      costoEnvio
+      costoEnvio,
+      cuotas
     };
   }
 
@@ -1554,14 +1626,16 @@
         if (tipoPubSelect && itemData.listingType) {
           const tipoMap = {
             'special': 'clasica',
-            'pro': 'cuotas_precio',
-            'premium': 'cuotas_premium'
+            'pro': 'premium',
+            'premium': 'premium'
           };
           const tipoValue = tipoMap[itemData.listingType] || 'clasica';
           // Only set if the option exists
           const option = tipoPubSelect.querySelector(`option[value="${tipoValue}"]`);
           if (option) {
             tipoPubSelect.value = tipoValue;
+            // Trigger visibility update for cuotas if premium
+            tipoPubSelect.dispatchEvent(new Event('change'));
           }
         }
       }

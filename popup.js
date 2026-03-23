@@ -10,6 +10,7 @@
   const SYNC_KEYS = {
     PROVINCIA: 'provincia',
     TIPO_PUB: 'tipoPub',
+    CUOTAS: 'cuotas',
     COMISION_CUSTOM: 'comisionCustom',
     COSTO_ENVIO: 'costoEnvio'
   };
@@ -22,6 +23,8 @@
   // ═══ DOM ELEMENTS ═══
   let provinciaSelect;
   let tipoPubSelect;
+  let cuotasSelect;
+  let cuotasGroup;
   let comisionCustomInput;
   let costoEnvioInput;
   let historialContainer;
@@ -41,6 +44,8 @@
     // Get DOM elements
     provinciaSelect = document.getElementById('provincia');
     tipoPubSelect = document.getElementById('tipo-pub');
+    cuotasSelect = document.getElementById('cuotas');
+    cuotasGroup = document.getElementById('cuotas-group');
     comisionCustomInput = document.getElementById('comision-custom');
     costoEnvioInput = document.getElementById('costoEnvio');
     historialContainer = document.getElementById('historial-container');
@@ -70,6 +75,7 @@
       const result = await chrome.storage.sync.get([
         SYNC_KEYS.PROVINCIA,
         SYNC_KEYS.TIPO_PUB,
+        SYNC_KEYS.CUOTAS,
         SYNC_KEYS.COMISION_CUSTOM,
         SYNC_KEYS.COSTO_ENVIO
       ]);
@@ -81,6 +87,11 @@
 
       if (result[SYNC_KEYS.TIPO_PUB]) {
         tipoPubSelect.value = result[SYNC_KEYS.TIPO_PUB];
+        updateCuotasVisibility(result[SYNC_KEYS.TIPO_PUB]);
+      }
+
+      if (result[SYNC_KEYS.CUOTAS] !== undefined) {
+        cuotasSelect.value = result[SYNC_KEYS.CUOTAS];
       }
 
       if (result[SYNC_KEYS.COMISION_CUSTOM] !== undefined) {
@@ -197,6 +208,15 @@
   }
 
   /**
+   * Show/hide cuotas select based on publication type
+   */
+  function updateCuotasVisibility(tipoPub) {
+    if (cuotasGroup) {
+      cuotasGroup.style.display = tipoPub === 'premium' ? 'block' : 'none';
+    }
+  }
+
+  /**
    * Attach event listeners to form elements
    */
   function attachEventListeners() {
@@ -208,6 +228,12 @@
     // Tipo de publicación change
     tipoPubSelect.addEventListener('change', () => {
       saveSetting(SYNC_KEYS.TIPO_PUB, tipoPubSelect.value);
+      updateCuotasVisibility(tipoPubSelect.value);
+    });
+
+    // Cuotas change
+    cuotasSelect.addEventListener('change', () => {
+      saveSetting(SYNC_KEYS.CUOTAS, cuotasSelect.value);
     });
 
     // Comisión personalizada change

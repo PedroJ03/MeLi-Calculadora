@@ -63,8 +63,18 @@
           <label for="tipo-pub">Tipo de publicación por defecto</label>
           <select id="tipo-pub" class="meli-popup-select">
             <option value="clasica">Clásica</option>
-            <option value="cuotas_precio">Cuotas (precio)</option>
-            <option value="cuotas_interes">Cuotas (interés)</option>
+            <option value="premium">Premium (Cuotas al mismo precio)</option>
+            <option value="interes_bajo">Cuotas con interés bajo</option>
+          </select>
+        </div>
+
+        <div class="meli-form-group" id="cuotas-group" style="display: none;">
+          <label for="cuotas">Cantidad de cuotas</label>
+          <select id="cuotas" class="meli-popup-select">
+            <option value="3">3 cuotas</option>
+            <option value="6" selected>6 cuotas</option>
+            <option value="9">9 cuotas</option>
+            <option value="12">12 cuotas</option>
           </select>
         </div>
 
