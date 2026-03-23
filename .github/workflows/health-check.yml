@@ -48,21 +48,17 @@ jobs:
       
       - name: Create issue on failure
         if: steps.health_check.outcome == 'failure' && env.creating_issue == 'true'
-        uses: actions/create-issue@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/github-script@v7
         with:
-          title: "🚨 Selectores de precio MeLi rotos - $(date +'%Y-%m-%d')"
-          body: |
-            ## Health Check Fallido
-            
-            Fecha: $(date)
-            
-            El script de health check no pudo detectar el precio en la URL de prueba.
-            
-            Ver logs del workflow para más detalles.
-          labels: |
-            dom-broken
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Selectores de precio MeLi rotos - ' + new Date().toISOString().split('T')[0],
+              body: '## Health Check Fallido\n\nFecha: ' + new Date().toISOString() + '\n\nEl script de health check no pudo detectar el precio en la URL de prueba.\n\nVer logs del workflow para más detalles.',
+              labels: ['dom-broken']
+            });
       
       - name: Comment on existing issue
         if: steps.health_check.outcome == 'failure' && env.creating_issue == 'false'
