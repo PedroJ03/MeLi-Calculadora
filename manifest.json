@@ -3,14 +3,18 @@
   "name": "MeLi Calculadora",
   "description": "Calculadora de costos y ganancias para vendedores de MercadoLibre Argentina",
   "version": "1.0.0",
+  "background": {
+    "service_worker": "background.js"
+  },
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "webRequest"
   ],
   "host_permissions": [
-    "*://*.mercadolibre.com.ar/*",
-    "https://api.mercadolibre.com/*"
+    "https://api.mercadolibre.com/*",
+    "https://*.mercadolibre.com.ar/*"
   ],
   "content_scripts": [
     {
