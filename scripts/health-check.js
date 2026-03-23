@@ -34,7 +34,7 @@ async function healthCheck() {
     
     // Wait up to 8 seconds for price to load
     console.log('⏳ Esperando carga de precio (max 8s)...');
-    await page.waitForTimeout(2000); // Initial wait
+    await new Promise(r => setTimeout(r, 2000)); // Initial wait
     
     let precioDetectado = null;
     let selectorUsado = null;
