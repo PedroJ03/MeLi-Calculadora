@@ -1,15 +1,17 @@
 /**
  * MeLi Calculadora - Content Script
- * Detects MercadoLibre product pages and injects calculator UI
+ * Uses official MeLi API when available, falls back to hardcoded config
  */
 
 (function() {
   'use strict';
 
-  // ═══ PART 1: CONFIGURACIÓN REMOTA ═══
+  // ═══ CONSTANTS ═══
 
-  const CONFIG_URL = 'https://raw.githubusercontent.com/PedroJ03/MeLi-Calculadora/main/config.json';
+  const API_BASE = 'https://api.mercadolibre.com';
+  const SESSION_CACHE_KEY = 'meli_session';
 
+  // Keep FALLBACK_CONFIG for when API is not available
   const FALLBACK_CONFIG = {
     version: "2025-07",
     comisiones: {
@@ -50,6 +52,10 @@
       "Tierra del Fuego": 0.025
     }
   };
+
+  // ═══ CONFIG URL FOR REMOTE CONFIG ═══
+
+  const CONFIG_URL = 'https://raw.githubusercontent.com/PedroJ03/MeLi-Calculadora/main/config.json';
 
   // Config cache
   let cachedConfig = null;
@@ -117,7 +123,256 @@
     }
   }
 
-  // ═══ PART 2: DETECCIÓN DE PRECIO RESILIENTE ═══
+  // ═══ PART 1: TOKEN EXTRACTION (Strategies A, B, C, D in cascade) ═══
+
+  async function extractMelIToken() {
+    // Check session cache first
+    try {
+      const cached = await chrome.storage.session.get([SESSION_CACHE_KEY]);
+      if (cached[SESSION_CACHE_KEY] && 
+          cached[SESSION_CACHE_KEY].expiry > Date.now()) {
+        console.log('[MeLi Calc] Using cached session token');
+        return cached[SESSION_CACHE_KEY].token;
+      }
+    } catch (e) {}
+
+    let token = null;
+
+    // Strategy A: Cookie
+    try {
+      const cookies = document.cookie.split(';');
+      for (const cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name.includes('access_token') || name.includes('bearer') || name.includes('session')) {
+          if (value && value.length > 20) {
+            token = decodeURIComponent(value);
+            console.log('[MeLi Calc] Token found in cookie:', name);
+            break;
+          }
+        }
+      }
+    } catch (e) { console.log('[MeLi Calc] Cookie strategy failed:', e.message); }
+
+    // Strategy B: localStorage/sessionStorage
+    if (!token) {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          const value = localStorage.getItem(key);
+          if (value && /APP_USR-\d+-\w+-\w+-\d+/.test(value)) {
+            // Try to parse as JSON first
+            try {
+              const parsed = JSON.parse(value);
+              if (parsed.access_token) {
+                token = parsed.access_token;
+                console.log('[MeLi Calc] Token found in localStorage:', key);
+                break;
+              }
+            } catch {}
+            // Try as raw token
+            const match = value.match(/APP_USR-\d+-\w+-\w+-\d+/);
+            if (match) {
+              token = match[0];
+              console.log('[MeLi Calc] Token found in localStorage:', key);
+              break;
+            }
+          }
+        }
+      } catch (e) { console.log('[MeLi Calc] localStorage strategy failed:', e.message); }
+    }
+
+    // Strategy C: Check window globals (MeLi preload state)
+    if (!token) {
+      try {
+        const globals = ['__PRELOADED_STATE__', '__STATE__', '__store__', 'MELI', 'ML'];
+        for (const globalName of globals) {
+          if (window[globalName]) {
+            const globalVal = window[globalName];
+            let found = null;
+            if (typeof globalVal === 'object') {
+              found = globalVal.access_token || globalVal.user?.id || 
+                     globalVal.userId || globalVal.Usuario?.id;
+            }
+            if (found) {
+              token = found;
+              console.log('[MeLi Calc] Token found in window.' + globalName);
+              break;
+            }
+          }
+        }
+      } catch (e) { console.log('[MeLi Calc] Global strategy failed:', e.message); }
+    }
+
+    // Strategy D: Look for JSON in script tags
+    if (!token) {
+      try {
+        const scripts = document.querySelectorAll('script');
+        for (const script of scripts) {
+          const content = script.textContent;
+          if (content && content.includes('APP_USR')) {
+            const match = content.match(/"access_token"\s*:\s*"([^"]+)"/);
+            if (match) {
+              token = match[1];
+              console.log('[MeLi Calc] Token found in script tag');
+              break;
+            }
+          }
+        }
+      } catch (e) { console.log('[MeLi Calc] Script strategy failed:', e.message); }
+    }
+
+    // Cache if found
+    if (token) {
+      try {
+        await chrome.storage.session.set({
+          [SESSION_CACHE_KEY]: {
+            token: token,
+            expiry: Date.now() + (6 * 60 * 60 * 1000) // 6 hours
+          }
+        });
+      } catch (e) {}
+    }
+
+    return token;
+  }
+
+  // ═══ PART 2: GET ITEM DATA FROM API ═══
+
+  async function getItemData(itemId, token) {
+    const url = `${API_BASE}/items/${itemId}`;
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    try {
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        console.warn('[MeLi Calc] Item API failed:', response.status);
+        return null;
+      }
+      const data = await response.json();
+      return {
+        category_id: data.category_id,
+        listing_type_id: data.listing_type_id,
+        price: data.price,
+        original_price: data.original_price
+      };
+    } catch (e) {
+      console.warn('[MeLi Calc] Item fetch failed:', e.message);
+      return null;
+    }
+  }
+
+  // ═══ PART 3: GET LISTING PRICES FROM API ═══
+
+  async function getListingPrices(price, listingTypeId, categoryId, token) {
+    const url = `${API_BASE}/sites/MLA/listing_prices?` +
+      `price=${price}&listing_type_id=${listingTypeId}&category_id=${categoryId}`;
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    try {
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        console.warn('[MeLi Calc] Listing prices API failed:', response.status);
+        return null;
+      }
+      const data = await response.json();
+      if (data && data.costs) {
+        return {
+          sale_fee_amount: data.costs.sale_fee_amount,
+          fixed_amount: data.costs.fixed_amount
+        };
+      }
+      return null;
+    } catch (e) {
+      console.warn('[MeLi Calc] Listing prices fetch failed:', e.message);
+      return null;
+    }
+  }
+
+  // ═══ PART 4: GET ITEM ID FROM URL ═══
+
+  function extractItemIdFromUrl() {
+    // Match MLA followed by numbers, or any item ID pattern in URL path
+    const urlMatch = window.location.pathname.match(/\/([A-Z]{3}\d+)(?:\/|$)/);
+    if (urlMatch) {
+      return urlMatch[1];
+    }
+    // Also try to match other patterns like /items/MLA123456789
+    const itemMatch = window.location.pathname.match(/\/items\/([A-Z]{3}\d+)/i);
+    if (itemMatch) {
+      return itemMatch[1];
+    }
+    return null;
+  }
+
+  // ═══ PART 5: HYBRID CALCULATION WITH API ═══
+
+  async function calculateWithAPI(precioVenta, params, config) {
+    // Extract item_id from URL
+    const itemId = extractItemIdFromUrl();
+    if (!itemId) {
+      console.log('[MeLi Calc] Could not extract item_id from URL');
+      return null;
+    }
+    console.log('[MeLi Calc] Extracted item_id:', itemId);
+
+    // Try to get token
+    const token = await extractMelIToken();
+
+    // Get item data
+    const itemData = await getItemData(itemId, token);
+    if (!itemData) {
+      console.log('[MeLi Calc] Could not get item data, using fallback');
+      return null;
+    }
+    console.log('[MeLi Calc] Item data:', itemData);
+
+    // Get listing prices
+    const prices = await getListingPrices(
+      itemData.price || precioVenta,
+      itemData.listing_type_id,
+      itemData.category_id,
+      token
+    );
+
+    if (!prices) {
+      console.log('[MeLi Calc] Could not get listing prices, using fallback');
+      return null;
+    }
+    console.log('[MeLi Calc] Listing prices:', prices);
+
+    // Calculate using real API data
+    const tipoPub = params.tipoPub || 'clasica';
+    const provincia = params.provincia || 'Buenos Aires';
+    const tasaIIBB = config.iibb?.[provincia] ?? 0.025;
+    const envioEfectivo = params.envioGratis ? (params.costoEnvio || 0) : 0;
+
+    const comisionExacta = prices.sale_fee_amount;
+    const costoFijoExact = prices.fixed_amount;
+    const iibb = precioVenta * tasaIIBB;
+
+    const totalDesctos = comisionExacta + costoFijoExact + iibb + envioEfectivo;
+    const gananciaNeta = precioVenta - totalDesctos - (params.costoProducto || 0);
+    const margen = precioVenta > 0 ? (gananciaNeta / precioVenta) * 100 : 0;
+
+    return {
+      precioVenta,
+      tasaComision: comisionExacta / precioVenta,
+      comisionExacta,
+      costoFijoExact,
+      tasaIIBB,
+      iibb,
+      envioEfectivo,
+      totalDesctos,
+      costoProducto: params.costoProducto || 0,
+      gananciaNeta,
+      margen,
+      configVersion: 'API',
+      fuenteConfig: 'api',
+      isApiData: true
+    };
+  }
+
+  // ═══ PART 6: DETECCIÓN DE PRECIO RESILIENTE ═══
 
   function detectarPrecio() {
     // Opción A: Buscar el precio con descuento (precio final que vas a cobrar)
@@ -196,7 +451,7 @@
     });
   }
 
-  // ═══ PART 3: MOTOR DE CÁLCULO ═══
+  // ═══ PART 7: FALLBACK CALCULATION (original logic) ═══
 
   function calcularRentabilidad(params, config) {
     const {
@@ -236,7 +491,8 @@
     return {
       precioVenta,
       tasaComision,
-      costoFijo,
+      comisionExacta: precioVenta * tasaComision,
+      costoFijoExact: costoFijo,
       tasaIIBB,
       iibb,
       envioEfectivo,
@@ -245,11 +501,12 @@
       gananciaNeta,
       margen,
       configVersion: config.version || 'unknown',
-      fuenteConfig: config._fuente || 'unknown'
+      fuenteConfig: config._fuente || 'unknown',
+      isApiData: false
     };
   }
 
-  // ═══ PART 4: PANEL UI Y LÓGICA ═══
+  // ═══ PART 8: PANEL UI Y LÓGICA ═══
 
   // State
   let panelElement = null;
@@ -269,7 +526,7 @@
     MINIMIZED: 'meli_calc_minimized'
   };
 
-  // ═══ PART 5: HISTORIAL DE CÁLCULOS ═══
+  // ═══ PART 9: HISTORIAL DE CÁLCULOS ═══
 
   /**
    * Get product title from the page
@@ -384,9 +641,17 @@
   }
 
   /**
-   * Get config source indicator and label
+   * Get config source indicator and label (extended for API)
    */
-  function getConfigSourceInfo(fuente) {
+  function getConfigSourceInfo(fuente, isApiData) {
+    // API data gets priority display
+    if (isApiData) {
+      return {
+        indicator: '🔵',
+        label: 'API oficial'
+      };
+    }
+    
     const indicators = {
       'remota': '🌐',
       'cache': '💾',
@@ -395,7 +660,7 @@
     const labels = {
       'remota': 'Remota',
       'cache': 'Caché',
-      'fallback': 'Local'
+      'fallback': 'estimado'
     };
     return {
       indicator: indicators[fuente] || '⚙️',
@@ -798,7 +1063,7 @@
         
         <!-- Config Source -->
         <div class="meli-calc-footer">
-          <span id="meli-calc-source">⚙️ Local</span>
+          <span id="meli-calc-source">⚙️ estimado</span>
           <span id="meli-calc-version">v--</span>
         </div>
       </div>
@@ -915,7 +1180,7 @@
   }
 
   /**
-   * Calculate and display results
+   * Calculate and display results (HYBRID: API first, fallback to hardcoded)
    */
   async function calculateAndDisplay() {
     const inputs = getInputValues();
@@ -924,7 +1189,23 @@
       currentConfig = await loadConfig();
     }
 
-    const result = calcularRentabilidad(inputs, currentConfig);
+    let result = null;
+    let isApiData = false;
+
+    // Try API first (only if we have a valid item on the page)
+    if (inputs.precioVenta > 0 && extractItemIdFromUrl()) {
+      result = await calculateWithAPI(inputs.precioVenta, inputs, currentConfig);
+      if (result) {
+        isApiData = true;
+        console.log('[MeLi Calc] Using API data for calculation');
+      }
+    }
+
+    // Fallback to hardcoded if API failed or not attempted
+    if (!result) {
+      result = calcularRentabilidad(inputs, currentConfig);
+      console.log('[MeLi Calc] Using fallback config for calculation');
+    }
 
     // Update results in DOM
     const comisionEl = panelElement.querySelector('#meli-res-comision');
@@ -944,7 +1225,7 @@
     const comisionAmount = inputs.precioVenta * result.tasaComision;
     
     comisionEl.textContent = formatCurrency(comisionAmount) + ` (${(result.tasaComision * 100).toFixed(1)}%)`;
-    costoFijoEl.textContent = formatCurrency(result.costoFijo);
+    costoFijoEl.textContent = formatCurrency(result.costoFijoExact || result.costoFijo);
     iibbEl.textContent = formatCurrency(result.iibb) + ` (${(result.tasaIIBB * 100).toFixed(2)}%)`;
     envioEl.textContent = formatCurrency(result.envioEfectivo);
     totalEl.textContent = formatCurrency(result.totalDesctos);
@@ -955,18 +1236,18 @@
     margenEl.textContent = result.margen.toFixed(1) + '%';
     margenEl.className = result.gananciaNeta >= 0 ? 'meli-calc-positive' : 'meli-calc-negative';
 
-    // 1.3: Loss warning - show red alert if gananciaNeta < 0
+    // Loss warning - show red alert if gananciaNeta < 0
     if (lossAlertEl) {
       lossAlertEl.style.display = result.gananciaNeta < 0 ? 'block' : 'none';
     }
     
-    // 1.4: Low margin badge - show yellow badge if margin < 10%
+    // Low margin badge - show yellow badge if margin < 10%
     if (marginBadgeEl) {
       marginBadgeEl.style.display = result.margen < 10 ? 'inline-block' : 'none';
     }
 
-    // Update config source
-    const sourceInfo = getConfigSourceInfo(result.fuenteConfig);
+    // Update config source (API data gets special badge)
+    const sourceInfo = getConfigSourceInfo(result.fuenteConfig, isApiData);
     sourceEl.textContent = `${sourceInfo.indicator} ${sourceInfo.label}`;
     versionEl.textContent = `v${result.configVersion}`;
 
@@ -1106,7 +1387,7 @@
     }
   }).observe(document, { subtree: true, childList: true });
 
-  // ═══ PART 6: HEALTH CHECK REPORTING ═══
+  // ═══ PART 10: HEALTH CHECK REPORTING ═══
 
   /**
    * Save health check report after successful calculation

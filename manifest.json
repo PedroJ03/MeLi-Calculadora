@@ -9,7 +9,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "*://*.mercadolibre.com.ar/*"
+    "*://*.mercadolibre.com.ar/*",
+    "https://api.mercadolibre.com/*"
   ],
   "content_scripts": [
     {
