@@ -119,32 +119,49 @@
 
   // ═══ PART 2: DETECCIÓN DE PRECIO RESILIENTE ═══
 
-  const SELECTORES_PRECIO = [
-    'span.andes-money-amount__fraction',           // #1 priority
-    '.ui-pdp-price__second-line .andes-money-amount__fraction',
-    'meta[itemprop="price"]'
-  ];
-
   function detectarPrecio() {
-    for (const selector of SELECTORES_PRECIO) {
-      const element = document.querySelector(selector);
-      if (!element) continue;
-      
-      let rawValue;
-      if (element.tagName.toLowerCase() === 'meta') {
-        rawValue = element.getAttribute('content');
-      } else {
-        rawValue = element.textContent;
+    // Opción A: Buscar el precio con descuento (precio final que vas a cobrar)
+    // En productos con descuento, el precio final suele estar en el segundo elemento
+    // o dentro de .ui-pdp-price__second-line
+    
+    // 1. Intentar primero con el selector más específico del precio final
+    const precioFinalEl = document.querySelector('.ui-pdp-price__second-line .andes-money-amount__fraction');
+    if (precioFinalEl) {
+      const rawValue = precioFinalEl.textContent;
+      if (rawValue) {
+        const cleaned = rawValue.replace(/\./g, '').replace(',', '.').trim();
+        const value = parseFloat(cleaned);
+        if (!isNaN(value) && value > 0) {
+          return value;
+        }
       }
-      
-      if (!rawValue) continue;
-      
-      // Parse AR format: "125.990" → 125990 (remove dots as thousand separators)
-      const cleaned = rawValue.replace(/\./g, '').replace(',', '.').trim();
-      const value = parseFloat(cleaned);
-      
-      if (!isNaN(value) && value > 0) {
-        return value;
+    }
+    
+    // 2. Buscar todos los spans con precios y tomar el ÚLTIMO (generalmente es el precio con descuento)
+    const todosLosPrecios = document.querySelectorAll('span.andes-money-amount__fraction');
+    if (todosLosPrecios.length > 0) {
+      // Si hay múltiples precios (tachado + descuento), tomar el último
+      const ultimoPrecio = todosLosPrecios[todosLosPrecios.length - 1];
+      const rawValue = ultimoPrecio.textContent;
+      if (rawValue) {
+        const cleaned = rawValue.replace(/\./g, '').replace(',', '.').trim();
+        const value = parseFloat(cleaned);
+        if (!isNaN(value) && value > 0) {
+          return value;
+        }
+      }
+    }
+    
+    // 3. Fallback: meta tag (generalmente tiene el precio base)
+    const metaPrice = document.querySelector('meta[itemprop="price"]');
+    if (metaPrice) {
+      const rawValue = metaPrice.getAttribute('content');
+      if (rawValue) {
+        const cleaned = rawValue.replace(/\./g, '').replace(',', '.').trim();
+        const value = parseFloat(cleaned);
+        if (!isNaN(value) && value > 0) {
+          return value;
+        }
       }
     }
     
