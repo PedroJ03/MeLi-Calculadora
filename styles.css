@@ -89,6 +89,16 @@
   transition: max-height 0.3s ease, padding 0.3s ease;
 }
 
+/* Section Header (Cálculos:) */
+.meli-calc-section-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--meli-text-muted);
+  margin: 16px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--meli-border);
+}
+
 /* Inputs and Selects */
 .meli-calc-input-group {
   margin-bottom: 12px;
@@ -521,12 +531,12 @@ body.meli-popup {
 .meli-loss-alert {
   background: var(--meli-error-bg);
   color: var(--meli-error-text);
-  padding: 8px;
+  padding: 10px;
   border-radius: 6px;
   font-weight: 600;
   text-align: center;
   margin-bottom: 12px;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 /* Low margin badge */

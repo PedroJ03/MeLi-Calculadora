@@ -738,8 +738,8 @@
           </div>
         </div>
         
-        <!-- Calculate Button -->
-        <button id="meli-calc-btn" class="meli-calc-button">Calcular</button>
+        <!-- Results Section Header -->
+        <div class="meli-calc-section-header">Cálculos:</div>
         
         <!-- Results Section -->
         <div class="meli-calc-results">
