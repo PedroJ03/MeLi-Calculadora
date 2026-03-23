@@ -5,7 +5,6 @@ on:
     branches: [ main ]
     paths:
       - 'extension/**'
-      - 'config.json'
 
 jobs:
   build-and-release:
