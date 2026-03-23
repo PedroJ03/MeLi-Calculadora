@@ -1,0 +1,88 @@
+name: Daily Health Check
+
+on:
+  schedule:
+    - cron: "0 11 * * *"  # Todos los días 8am ART = 11 UTC
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm install puppeteer-core @sparticuz/chromium
+      
+      - name: Run health check
+        id: health_check
+        run: node scripts/health-check.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      - name: Handle failure - Check for existing issue
+        if: steps.health_check.outcome == 'failure'
+        run: |
+          # Buscar issue abierto con label dom-broken
+          EXISTING=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&labels=dom-broken" | \
+            jq -r '.[0].number // empty')
+          
+          if [ -z "$EXISTING" ]; then
+            echo "creating_issue=true" >> $GITHUB_ENV
+          else
+            echo "existing_issue=$EXISTING" >> $GITHUB_ENV
+            echo "creating_issue=false" >> $GITHUB_ENV
+          fi
+      
+      - name: Create issue on failure
+        if: steps.health_check.outcome == 'failure' && env.creating_issue == 'true'
+        uses: actions/create-issue@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          title: "🚨 Selectores de precio MeLi rotos - $(date +'%Y-%m-%d')"
+          body: |
+            ## Health Check Fallido
+            
+            Fecha: $(date)
+            
+            El script de health check no pudo detectar el precio en la URL de prueba.
+            
+            Ver logs del workflow para más detalles.
+          labels: |
+            dom-broken
+      
+      - name: Comment on existing issue
+        if: steps.health_check.outcome == 'failure' && env.creating_issue == 'false'
+        run: |
+          curl -s -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"body": "🔄 Falla detectada nuevamente el '$(date +'%Y-%m-%d %H:%M')'"}' \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ env.existing_issue }}/comments"
+      
+      - name: Close issue on success
+        if: steps.health_check.outcome == 'success'
+        run: |
+          # Buscar issues abiertos con label dom-broken
+          ISSUES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&labels=dom-broken" | \
+            jq -r '.[].number')
+          
+          for ISSUE in $ISSUES; do
+            curl -s -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d '{"state": "closed", "body": "✅ Resuelto automáticamente - Health check pasó el '$(date +'%Y-%m-%d %H:%M')'"}' \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE"
+          done

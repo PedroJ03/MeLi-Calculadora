@@ -132,7 +132,7 @@
         const cleaned = rawValue.replace(/\./g, '').replace(',', '.').trim();
         const value = parseFloat(cleaned);
         if (!isNaN(value) && value > 0) {
-          return value;
+          return { price: value, selector: '.ui-pdp-price__second-line .andes-money-amount__fraction' };
         }
       }
     }
@@ -147,7 +147,7 @@
         const cleaned = rawValue.replace(/\./g, '').replace(',', '.').trim();
         const value = parseFloat(cleaned);
         if (!isNaN(value) && value > 0) {
-          return value;
+          return { price: value, selector: 'span.andes-money-amount__fraction' };
         }
       }
     }
@@ -160,26 +160,26 @@
         const cleaned = rawValue.replace(/\./g, '').replace(',', '.').trim();
         const value = parseFloat(cleaned);
         if (!isNaN(value) && value > 0) {
-          return value;
+          return { price: value, selector: 'meta[itemprop="price"]' };
         }
       }
     }
     
-    return null;
+    return { price: null, selector: null };
   }
 
   async function detectarPrecioConObservador() {
     // First attempt
-    let precio = detectarPrecio();
-    if (precio !== null) return precio;
+    let resultado = detectarPrecio();
+    if (resultado.price !== null) return resultado;
     
     // Set up observer and wait up to 4 seconds
     return new Promise((resolve) => {
       const observer = new MutationObserver(() => {
-        const nuevoPrecio = detectarPrecio();
-        if (nuevoPrecio !== null) {
+        const nuevoResultado = detectarPrecio();
+        if (nuevoResultado.price !== null) {
           observer.disconnect();
-          resolve(nuevoPrecio);
+          resolve(nuevoResultado);
         }
       });
       
@@ -191,7 +191,7 @@
       // Timeout after 4 seconds
       setTimeout(() => {
         observer.disconnect();
-        resolve(null);
+        resolve({ price: null, selector: null });
       }, 4000);
     });
   }
@@ -259,6 +259,7 @@
   let panelInjected = false; // Track if panel is already injected
   let currentListeners = []; // Store event listener references for cleanup
   let priceObserver = null; // MutationObserver for async price loading
+  let lastSelectorUsado = null; // Track which selector detected the price for health reporting
 
   // Storage keys
   const STORAGE_KEYS = {
@@ -976,6 +977,9 @@
       gananciaNeta: result.gananciaNeta,
       margen: result.margen
     });
+
+    // Save health report for telemetry
+    saveHealthReport(lastSelectorUsado, result.configVersion, result.fuenteConfig);
   }
 
   /**
@@ -1002,18 +1006,20 @@
 
     // Try to detect price - if null initially, start observer with 3-second timeout
     let precioVenta;
-    const precioInicial = detectarPrecio();
+    let selectorUsado = null;
+    const resultadoInicial = detectarPrecio();
     
-    if (precioInicial !== null) {
-      precioVenta = precioInicial;
+    if (resultadoInicial.price !== null) {
+      precioVenta = resultadoInicial.price;
+      selectorUsado = resultadoInicial.selector;
     } else {
       // No price detected initially - use MutationObserver with 3s timeout
-      precioVenta = await new Promise((resolve) => {
+      const resultadoObservado = await new Promise((resolve) => {
         priceObserver = new MutationObserver(() => {
-          const nuevoPrecio = detectarPrecio();
-          if (nuevoPrecio !== null) {
+          const nuevoResultado = detectarPrecio();
+          if (nuevoResultado.price !== null) {
             priceObserver?.disconnect();
-            resolve(nuevoPrecio);
+            resolve(nuevoResultado);
           }
         });
         
@@ -1025,10 +1031,15 @@
         // Timeout after 3 seconds
         setTimeout(() => {
           priceObserver?.disconnect();
-          resolve(null);
+          resolve({ price: null, selector: null });
         }, 3000);
       });
+      precioVenta = resultadoObservado.price;
+      selectorUsado = resultadoObservado.selector;
     }
+    
+    // Store the selector used for health reporting
+    lastSelectorUsado = selectorUsado;
     
     // Load saved preferences
     const preferences = await loadPreferences();
@@ -1094,5 +1105,27 @@
       setTimeout(initPanel, 500);
     }
   }).observe(document, { subtree: true, childList: true });
+
+  // ═══ PART 6: HEALTH CHECK REPORTING ═══
+
+  /**
+   * Save health check report after successful calculation
+   * This data can be used for anonymous telemetry to detect failing selectors
+   */
+  async function saveHealthReport(selectorUsado, configVersion, configFuente) {
+    try {
+      await chrome.storage.local.set({
+        last_health_report: {
+          timestamp: Date.now(),
+          selector_usado: selectorUsado,
+          config_version: configVersion,
+          config_fuente: configFuente
+        }
+      });
+    } catch (error) {
+      // Silently fail - health reporting is non-critical
+      console.log('[MeLi Calc] Health report failed:', error.message);
+    }
+  }
 
 })();
