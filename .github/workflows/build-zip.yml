@@ -1,0 +1,86 @@
+name: Build and Release Extension
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'extension/**'
+      - 'config.json'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      
+      - name: Copy config.json to extension
+        run: cp config.json extension/
+      
+      - name: Create ZIP
+        run: |
+          cd extension
+          zip -r ../meli-calc-extension.zip . -x "*.DS_Store" -x "*.git*"
+          cd ..
+      
+      - name: Get next version
+        id: get_version
+        run: |
+          # Get latest release tag
+          LATEST=$(git tag --sort=-v:refname | head -n1 | sed 's/v//' || echo "0.0")
+          if [ -z "$LATEST" ]; then
+            LATEST="0.0"
+          fi
+          
+          # Split version
+          MAJOR=$(echo $LATEST | cut -d. -f1)
+          MINOR=$(echo $LATEST | cut -d. -f2)
+          
+          # Increment minor
+          NEW_MINOR=$((MINOR + 1))
+          NEW_VERSION="v${MAJOR}.${NEW_MINOR}"
+          
+          echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "Latest: v${LATEST} -> New: ${NEW_VERSION}"
+      
+      - name: Read CHANGELOG
+        id: changelog
+        run: |
+          if [ -f extension/CHANGELOG.md ]; then
+            # Extract first section (between first # and next #)
+            NOTES=$(sed -n '/^# /,/^# /p' extension/CHANGELOG.md | head -n -1)
+            if [ -z "$NOTES" ]; then
+              NOTES="Release ${{ steps.get_version.outputs.version }}"
+            fi
+          else
+            NOTES="Release ${{ steps.get_version.outputs.version }}"
+          fi
+          
+          # Write to file for multiline support
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: ${{ steps.get_version.outputs.version }}
+          body: ${{ steps.changelog.outputs.notes }}
+          draft: false
+          prerelease: false
+      
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./meli-calc-extension.zip
+          asset_name: meli-calc-extension.zip
+          asset_content_type: application/zip

@@ -1,0 +1,49 @@
+name: Check Tarifas MeLi
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"  # Lunes 9am ART = 12 UTC
+  workflow_dispatch:
+
+jobs:
+  check-tarifas:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm install node-fetch@2 cheerio
+      
+      - name: Scrape tarifas
+        run: node scripts/scrape-tarifas.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Check if config.json changed
+        id: check_changes
+        run: |
+          if git diff --quiet config.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Tarifas sin cambios, nada que commitear"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add config.json
+          git commit -m "chore: actualizar tarifas MeLi $(date +'%Y-%m-%d')"
+          git push
