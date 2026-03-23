@@ -605,7 +605,7 @@
       if (cfg.premium_recargos) {
         // New schema: clasica_default, premium_recargos, interes_bajo_recargo
         if (tipoPub === 'premium') {
-          const recargo = cfg.premium_recargos[cuotas] ?? cfg.premium_recargos["6"] ?? 0.142;
+          const recargo = cfg.premium_recargos[cuotas] || cfg.premium_recargos["6"] || 0.142;
           comisionPorcentaje = cfg.clasica_default + recargo;
         } else if (tipoPub === 'interes_bajo') {
           comisionPorcentaje = cfg.clasica_default + cfg.interes_bajo_recargo;
@@ -630,7 +630,7 @@
           if (mapped) tipoPubKey = mapped;
         }
         
-        comisionPorcentaje = cfg[tipoPubKey]?.default ?? 0.13;
+        comisionPorcentaje = cfg[tipoPubKey]?.default || 0.13;
       }
       
       comisionMonto = precioVenta * comisionPorcentaje;
@@ -650,24 +650,24 @@
         costoFijoMonto = costoUnidadResult.costo;
       } else {
         // Backwards compatibility: use old costo_fijo array
-        costoFijoMonto = FALLBACK_CONFIG.costo_fijo?.find(r => precioVenta <= r.hasta)?.costo ?? 0;
+        costoFijoMonto = FALLBACK_CONFIG.costo_fijo?.find(r => precioVenta <= r.hasta)?.costo || 0;
       }
     }
 
     // IIBB always local
-    const tasaIIBB = FALLBACK_CONFIG.iibb?.[provincia] ?? 0.025;
+    const tasaIIBB = FALLBACK_CONFIG.iibb?.[provincia] || 0.025;
     const iibbMonto = precioVenta * tasaIIBB;
     
     // Shipping logic with mandatory free shipping threshold
     const cfgCostoUnidad = FALLBACK_CONFIG.costo_unidad;
-    const umbralEnvioGratis = cfgCostoUnidad?.umbral_envio_gratis ?? 30000;
+    const umbralEnvioGratis = cfgCostoUnidad?.umbral_envio_gratis || 30000;
     let envioEfectivo = 0;
     let envioForzado = false;
     
     if (precioVenta >= umbralEnvioGratis) {
       // Product above threshold - shipping is MANDATORY
       // If user didn't check "envio gratis", we still need to account for the cost
-      envioEfectivo = costoEnvio || cfgCostoUnidad?.variable_estimado_default ?? 2800;
+      envioEfectivo = costoEnvio || cfgCostoUnidad?.variable_estimado_default || 2800;
       envioForzado = !envioGratis;
     } else if (envioGratis) {
       // Below threshold but user chose free shipping
