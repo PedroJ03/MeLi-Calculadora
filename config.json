@@ -1,7 +1,7 @@
 {
-  "version": "2025-07",
+  "version": "2026-03",
   "comisiones": {
-    "clasica_default": 0.13,
+    "clasica_default": 0.1162,
     "premium_recargos": {
       "3": 0.09,
       "6": 0.142,
@@ -13,12 +13,27 @@
   "costo_unidad": {
     "umbral_maximo": 33000,
     "umbral_envio_gratis": 30000,
-    "logisticas_fijas": ["custom", "not_specified"],
-    "tags_flex": ["self_service_in", "self_service_out"],
+    "logisticas_fijas": [
+      "custom",
+      "not_specified"
+    ],
+    "tags_flex": [
+      "self_service_in",
+      "self_service_out"
+    ],
     "fijo_escalonado": [
-      { "max": 15999, "fee": 1255 },
-      { "max": 23999, "fee": 2500 },
-      { "max": 32999.99, "fee": 3030 }
+      {
+        "max": 16000,
+        "fee": 1255
+      },
+      {
+        "max": 24000,
+        "fee": 2500
+      },
+      {
+        "max": 33000,
+        "fee": 3030
+      }
     ],
     "variable_estimado_default": 2800
   },
