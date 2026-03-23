@@ -8,7 +8,7 @@
 
   // ═══ PART 1: CONFIGURACIÓN REMOTA ═══
 
-  const CONFIG_URL = 'https://raw.githubusercontent.com/[TU_USUARIO]/meli-calc/main/config.json';
+  const CONFIG_URL = 'https://raw.githubusercontent.com/PedroJ03/MeLi-Calculadora/main/config.json';
 
   const FALLBACK_CONFIG = {
     version: "2025-07",
