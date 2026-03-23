@@ -242,7 +242,10 @@ body.meli-popup {
 }
 
 .meli-popup-logo {
-  font-size: 18px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: contain;
 }
 
 .meli-popup-version {
