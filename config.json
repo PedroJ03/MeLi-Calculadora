@@ -1,0 +1,40 @@
+{
+  "version": "2025-07",
+  "comisiones": {
+    "clasica": { "min": 0.1162, "max": 0.1714, "default": 0.13 },
+    "cuotas_precio": { "min": 0.15, "max": 0.1775, "default": 0.16 },
+    "cuotas_interes": { "min": 0.1162, "max": 0.1714, "default": 0.13 }
+  },
+  "costo_fijo": [
+    { "hasta": 15000, "costo": 1095 },
+    { "hasta": 25000, "costo": 2190 },
+    { "hasta": 33000, "costo": 2628 },
+    { "hasta": 999999999, "costo": 0 }
+  ],
+  "iibb": {
+    "Buenos Aires": 0.035,
+    "CABA": 0.03,
+    "Córdoba": 0.0475,
+    "Santa Fe": 0.035,
+    "Mendoza": 0.035,
+    "Tucumán": 0.03,
+    "Salta": 0.025,
+    "Entre Ríos": 0.03,
+    "Misiones": 0.025,
+    "Chaco": 0.025,
+    "Corrientes": 0.025,
+    "Santiago del Estero": 0.025,
+    "San Juan": 0.025,
+    "Jujuy": 0.025,
+    "Río Negro": 0.03,
+    "Neuquén": 0.025,
+    "Formosa": 0.01,
+    "Chubut": 0.025,
+    "San Luis": 0.025,
+    "Catamarca": 0.025,
+    "La Rioja": 0.025,
+    "La Pampa": 0.025,
+    "Santa Cruz": 0.025,
+    "Tierra del Fuego": 0.025
+  }
+}
