@@ -16,9 +16,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
       
-      - name: Copy config.json to extension
-        run: cp config.json extension/
-      
       - name: Create ZIP
         run: |
           cd extension
