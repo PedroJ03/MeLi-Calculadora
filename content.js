@@ -848,7 +848,7 @@
       default:
         // Amarillo: Solo podemos detectar el precio del DOM
         banner.classList.add('estimated');
-        banner.innerHTML = '⚠ Precio estimado del DOM';
+        banner.innerHTML = '⚠ Precio detectado en la página';
     }
   }
 
