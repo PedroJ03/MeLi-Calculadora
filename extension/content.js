@@ -87,7 +87,7 @@
 
   // ═══ CONFIG URL FOR REMOTE CONFIG ═══
 
-  const CONFIG_URL = 'https://raw.githubusercontent.com/PedroJ03/MeLi-Calculadora/main/config.json';
+  const CONFIG_URL = 'https://raw.githubusercontent.com/PedroJ03/MeLi-Calculadora/main/extension/config.json';
 
   // Config cache
   let cachedConfig = null;
